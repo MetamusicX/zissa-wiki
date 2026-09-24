@@ -55,7 +55,7 @@ max = 5
 # enforce it. Adjust the header text to match your schema.
 #
 # [markers]
-# relevance_header = "Relevance to Paulo's Research"   # this header must carry [P]
+# relevance_header = "Relevance to Your Research"   # this header must carry [P]
 # relevance_marker = "[P]"
 # overview_marker = "[W]"                              # a synthesis "## Overview" must carry [W]
 
