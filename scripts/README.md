@@ -59,6 +59,51 @@ before the existence check; links inside fenced code blocks and `` `inline code`
 are ignored (they're examples, not real links). The index and meta-file checks
 run only once the wiki has at least one content page.
 
+## `wiki quotes` — are the quotes really in the sources?
+
+The schema says *"never invent citations"*; this is the check that enforces it.
+For every source note it takes each blockquote that opens with a quote mark, finds
+the raw file(s) the note links to (markdown links or `` `raw/...` `` paths), and
+checks that the quoted words are actually there.
+
+```bash
+python3 scripts/wiki.py quotes                                   # every source note
+python3 scripts/wiki.py quotes wiki/source-notes/smith-2020-x.md # just one (e.g. after an ingest)
+python3 scripts/wiki.py quotes --min-severity error              # errors only
+```
+
+**What counts as a match.** Only the letters are compared — punctuation, spacing,
+case, accents, ligatures, line-end hyphens, `*emphasis*` and footnote numbers are
+ignored, because PDF extraction disturbs all of them. An ellipsis (`...`, `…`,
+`[...]`) or a `[bracketed insertion]` in the quote splits it into fragments that are
+checked one by one. Running heads, page numbers and footers that fall inside a
+passage at a page break are recognised and skipped.
+
+When a quote does not match, the checker lines it up against the source and says
+where the two part and what the source actually reads:
+
+| Check | Tier | Meaning |
+|---|---|---|
+| `quote-differs` | **error** | the wording differs — the message shows the quote and the source side by side |
+| `quote-omits` | **error** | words are left out without an ellipsis (this can reverse the sense: "is [not] a concept") |
+| `quote-missing` | **error** | nothing in the raw file resembles the quote (paraphrase? wrong file?) |
+| `quote-citation` | warn | the quote silently drops an in-text citation such as "(Krohn 2010: 31–2)" |
+| `quote-page` | warn | the cited page does not hold the passage, or the note cites PDF page numbers throughout |
+| `quote-unchecked` | info | no raw file linked, file absent, no text layer (scanned PDF), translation, or too short |
+
+**Page numbers.** A PDF's page 63 is often the book's printed page 45. The
+checker reads the page numbers the PDF itself prints to learn the offset; when a
+file has none it falls back on the offset most of the note's quotes agree on.
+Citations marked `approx.` or `cf.` are not page-checked.
+
+**Formats.** PDF needs `pdftotext` from poppler (`brew install poppler` on macOS,
+`poppler-utils` on Linux); without it PDF quotes are reported as unchecked.
+`.md`, `.txt`, `.html`, `.docx` and `.epub` are read with the standard library.
+Scanned PDFs need OCR first.
+
+**Translations.** A quote whose citation says `trans.`, `translated` or
+`my translation` is skipped — it cannot match the original-language source.
+
 ## Configuration — `conventions.toml`
 
 Data-shaped rules live in `../conventions.toml`: the type enum, required

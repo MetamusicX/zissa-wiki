@@ -67,6 +67,12 @@ python3 scripts/wiki.py lint            # link integrity, orphans, index drift, 
 python3 scripts/wiki.py lint --min-severity error   # the commit gate — exits nonzero on any error
 ```
 
+A second command checks the scholarly fidelity of the wiki itself: every direct quote in a source note is compared, word for word, with the raw file it came from. When a quote has drifted, it shows where, and what the source actually says:
+
+```bash
+python3 scripts/wiki.py quotes          # quotes vs. raw files, and their page numbers
+```
+
 It follows the *"the tool is the hands; the agent is the head"* split (borrowed from [engram](https://github.com/jeromeetienne/engram) and [tome](https://github.com/chicken-noodle-chris/tome)): move everything mechanically checkable out of the model so the agent stops hand-scanning every page. An empty template lints clean. See `scripts/README.md` for the full check list and `conventions.toml` for the rules.
 
 ## Folder structure
@@ -82,7 +88,7 @@ outputs/
   essays/   slides/   handouts/   tables/
 conversations/
 archive/
-scripts/            wiki.py — the deterministic `wiki lint` tool
+scripts/            wiki.py — the deterministic `wiki lint` and `wiki quotes` tools
 conventions.toml    data-shaped rules the linter reads
 ```
 
@@ -159,7 +165,8 @@ The cascade: **cluster → synthesis → related fields → individual pages**. 
 - [Claude Code](https://claude.ai/code) (terminal or desktop app)
 - The `CLAUDE.md` file in the root folder — this is what makes Claude a wiki agent
 - No database, no embeddings, no plugins — just markdown files and folders
-- Python 3.9+ (optional — only for the `wiki lint` tool; the wiki itself is pure markdown)
+- Python 3.9+ (optional — only for the `wiki lint` and `wiki quotes` tools; the wiki itself is pure markdown)
+- [poppler](https://poppler.freedesktop.org/)'s `pdftotext` (optional — lets `wiki quotes` read PDF sources; `brew install poppler`)
 
 ## Credits
 

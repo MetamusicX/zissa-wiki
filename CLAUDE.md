@@ -129,6 +129,10 @@ updated: YYYY-MM-DD
 
 > "[Exact quote]" (p. XX)
 
+<!-- Word for word from the raw file. Mark every omission with "…" and every insertion
+     with [brackets]. Cite the page number printed in the source, not the PDF page.
+     Add "(trans.)" to a quote you translated. `wiki.py quotes` checks all of this. -->
+
 ## Open Questions
 - [Question raised by this source but not answered]
 
@@ -359,6 +363,7 @@ updated: YYYY-MM-DD
 2. Read the source in full.
 3. Discuss key takeaways with the researcher before writing anything. Identify: central argument, key claims, surprising or important moments, relevant concepts and authors, connections to existing wiki pages.
 4. Create a source-note page in `wiki/source-notes/` using the source-note template. Filename in lowercase-kebab-case: `author-year-short-title.md`.
+   Then run `python3 scripts/wiki.py quotes wiki/source-notes/<file>.md` and resolve every error before going on. A quote the checker cannot find in the raw file is either misquoted — fix it against the source — or not a quote, and must not be presented as one.
 5. Update `index.md` — add the new source note to the Source Notes section.
 6. Scan the entire wiki for impact. For every concept, author, debate, theme, or project touched by this source:
    - If a page exists: open it, add the source note to its Source Support section, add any new direct quotes or claims, update the `updated` date in frontmatter.
@@ -401,7 +406,7 @@ A single ingest may touch 10-15 wiki pages. Do not shortcut this.
 7. **Weak or generic pages** — pages with thin content, vague definitions, or no source support. Flag for enrichment.
 8. **Thin source support** — concepts or debates with only one source. Note that more sources are needed.
 
-> **Mechanical checks are automated.** The deterministic subset — broken links (4), orphans (5), oversize (6), thin support (8), plus missing frontmatter and index drift — is implemented in `scripts/wiki.py` (rules in `conventions.toml`). Run `python3 scripts/wiki.py lint` to get them for free and reliably, then spend your own judgement on the checks that need reading: duplicates (1), stale drift (2), contradictions (3), and weak/generic pages (7). Treat `wiki lint` passing error-free as the last step of any wiki-touching task.
+> **Mechanical checks are automated.** The deterministic subset — broken links (4), orphans (5), oversize (6), thin support (8), plus missing frontmatter and index drift — is implemented in `scripts/wiki.py` (rules in `conventions.toml`). Run `python3 scripts/wiki.py lint` to get them for free and reliably — and `python3 scripts/wiki.py quotes` to check every direct quote against its raw file — then spend your own judgement on the checks that need reading: duplicates (1), stale drift (2), contradictions (3), and weak/generic pages (7). Treat `wiki lint` passing error-free as the last step of any wiki-touching task.
 
 After linting, produce a prioritized list of issues. Do not auto-fix — present findings and let the researcher decide.
 

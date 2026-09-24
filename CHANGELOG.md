@@ -4,6 +4,18 @@ All notable changes to Zissa Wiki are recorded here.
 
 ## Unreleased
 
+### Added
+- **`wiki quotes` — checks every direct quote against its source.** For each
+  source note, the quotes are compared word for word with the raw file(s) the
+  note links to (PDF via poppler's `pdftotext`; `.md`, `.txt`, `.html`, `.docx`,
+  `.epub` natively). When a quote has drifted, the report shows where it parts
+  from the source and what the source actually reads; unmarked omissions,
+  dropped in-text citations, and wrong page numbers are flagged too. PDF page
+  offsets are read from the page numbers the PDF prints. Exits nonzero on any
+  misquote. See `scripts/README.md`.
+- The INGEST workflow now runs the quote check on each new source note, and the
+  source-note template spells out the quoting conventions it enforces.
+
 ### Fixed
 - **`CLAUDE.md` is neutral again.** Since the v2 update (April 2026) the
   template's `CLAUDE.md` had shipped with the maintainer's personal Domain
