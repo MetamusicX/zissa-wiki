@@ -45,6 +45,8 @@ Three layers:
 | **wiki/** | Structured markdown pages (concepts, authors, debates, syntheses, source-notes, projects) | The LLM |
 | **schema** | `CLAUDE.md` (operational instructions), `index.md` (master index), `log.md` (change log) | You + the LLM |
 
+![How Zissa Wiki works: you add sources to raw/; Claude Code, following CLAUDE.md, reads them and writes source notes, concept/author/debate pages and syntheses into wiki/, keeps index.md and log.md current, and runs scripts/wiki.py for mechanical lint checks](.github/assets/zissa-wiki-overview.png)
+
 ## Workflows
 
 The operational logic lives in `CLAUDE.md`. Claude reads it at the start of every session and acts as a dedicated research intelligence agent. Three core workflows:
