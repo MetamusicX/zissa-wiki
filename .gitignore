@@ -8,3 +8,4 @@ raw/_staging/*
 !raw/_staging/.gitkeep
 outputs/**/*.pptx
 outputs/**/*.pdf
+.claude/settings.local.json

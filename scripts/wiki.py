@@ -13,6 +13,8 @@ so the same script serves both this template and a fully specialised wiki.
 Usage:
     python3 scripts/wiki.py lint [--root PATH] [--min-severity error|warn|info] [--type TYPE]
     python3 scripts/wiki.py quotes [NOTE ...] [--root PATH] [--min-severity error|warn|info]
+    python3 scripts/wiki.py graph [--around PAGE] [--depth N] [--type TYPE] [--all-edges] [--raw]
+    python3 scripts/wiki.py move OLD NEW [--dry-run]
 
 Exit code is nonzero when any ERROR-tier finding is present, so this can gate a
 commit or CI ("lint must pass error-free as the last step of any wiki-touching task").
@@ -23,8 +25,10 @@ the raw file(s) the note links to, and that its page citation fits. It compares
 letters only, so punctuation, spacing and PDF extraction noise never count. PDFs need
 `pdftotext` (poppler); .md/.txt/.html/.docx/.epub are read with the stdlib.
 
+`graph` prints the link graph as a Mermaid diagram; `move` renames a page and rewrites
+every link and `related:` entry that points to it.
+
 Roadmap (not yet implemented — this is the seam to grow the CLI along):
-    wiki move <old> <new>   safe rename, rewrite every inbound relative link
     wiki search <query>     BM25 over frontmatter + body
     wiki whois <name>       resolve an author name/alias to its page
 """
@@ -326,7 +330,7 @@ def lint(root, cfg, type_filter=None):
                             inbound[tgt].add(p.relpath)
 
         # links: broken-link check + inbound graph + thin-support tally
-        src_link_count = 0
+        src_notes = set()                          # distinct source notes cited
         in_fence = False
         for i, line in enumerate(p.lines, 1):
             stripped = line.lstrip()
@@ -344,8 +348,8 @@ def lint(root, cfg, type_filter=None):
                     add(link_severity(resolved), "link-broken", p.relpath, f"link → `{resolved}` (missing)", line=i)
                 elif resolved in wiki_paths and resolved != p.relpath:
                     inbound[resolved].add(p.relpath)
-                if resolved.startswith(os.path.join("wiki", "source-notes")):
-                    src_link_count += 1
+                if resolved.startswith(os.path.join("wiki", "source-notes")) and exists:
+                    src_notes.add(resolved)
 
             # epistemic-marker checks (header lines only) — only if the schema declares markers
             if HEADER_RE.match(line):
@@ -358,9 +362,9 @@ def lint(root, cfg, type_filter=None):
                         f"synthesis Overview header missing {overview_marker}", line=i)
 
         # thin source support
-        if p.type in thin_types and src_link_count < thin_min:
+        if p.type in thin_types and len(src_notes) < thin_min:
             add("info", "thin-support", p.relpath,
-                f"{p.type} cites {src_link_count} source-note(s) (want ≥{thin_min})")
+                f"{p.type} cites {len(src_notes)} source-note(s) (want ≥{thin_min})")
 
         # size caps
         n = len(p.lines)
@@ -807,6 +811,241 @@ def check_quotes(root, notes):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Link graph — shared by `graph` and `move`
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _body_lines(lines):
+    """Yield (lineno, line) outside fenced code blocks."""
+    in_fence = False
+    for i, line in enumerate(lines, 1):
+        if line.lstrip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            yield i, line
+
+
+def _related(page):
+    rel = page.fm.get("related")
+    return rel if isinstance(rel, list) else ([rel] if rel else [])
+
+
+def link_graph(root, pages):
+    """Return (links, related): sets of (src, dst) relpath pairs between wiki pages."""
+    paths = {p.relpath for p in pages}
+    by_stem = {}
+    for p in pages:
+        by_stem.setdefault(p.stem, []).append(p.relpath)
+    links, related = set(), set()
+    for p in pages:
+        for _i, line in _body_lines(p.lines):
+            for target in _links_in(line):
+                r = resolve_link(root, p.relpath, target)
+                if r in paths and r != p.relpath:
+                    links.add((p.relpath, r))
+        for stem in _related(p):
+            for r in by_stem.get(stem, []):
+                if r != p.relpath:
+                    related.add((p.relpath, r))
+    return links, related
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Graph — draw the wiki (or one page's neighbourhood) as a Mermaid diagram
+# ─────────────────────────────────────────────────────────────────────────────
+
+# type -> (open, close) node shape, and a fill that reads in light and dark themes
+SHAPE = {"concept": ('("', '")'), "author": ('(["', '"])'), "source-note": ('[["', '"]]'),
+         "debate": ('{{"', '"}}'), "synthesis": ('[/"', '"/]')}
+FILL = {"concept": "#dbeafe,stroke:#3b82f6", "author": "#fce7f3,stroke:#db2777",
+        "source-note": "#f1f5f9,stroke:#64748b", "debate": "#fef3c7,stroke:#d97706",
+        "synthesis": "#dcfce7,stroke:#16a34a", "project": "#ede9fe,stroke:#7c3aed",
+        "method": "#e0f2fe,stroke:#0284c7", "theme": "#ffedd5,stroke:#ea580c"}
+
+
+def _find_page(pages, key):
+    """Match a page by repo-relative path, filename, or stem."""
+    key = key.strip().replace("/", os.sep)
+    hits = [p for p in pages if key in (p.relpath, os.path.basename(p.relpath), p.stem)]
+    return hits
+
+
+def graph(root, pages, around=None, depth=1, types=None, max_nodes=60, direction="LR", all_edges=False):
+    """Return (mermaid source, note) for the wiki graph, or raise ValueError.
+
+    With `around`, only the edges by which each page was reached are drawn (a tree
+    out from the centre), which stays readable; `all_edges` adds the cross-links too.
+    """
+    links, related = link_graph(root, pages)
+    by_path = {p.relpath: p for p in pages}
+    adj = {p.relpath: set() for p in pages}
+    for a, b in links | related:
+        adj[a].add(b)
+        adj[b].add(a)
+
+    if around:
+        hits = _find_page(pages, around)
+        if len(hits) != 1:
+            raise ValueError(f"`{around}` matches {len(hits)} pages" + (
+                ": " + ", ".join(h.relpath for h in hits) if hits else ""))
+        keep, frontier, tree = {hits[0].relpath}, [hits[0].relpath], set()
+        for _ in range(depth):
+            nxt = []
+            for f in frontier:
+                for n in sorted(adj[f] - keep):
+                    keep.add(n)
+                    nxt.append(n)
+                    tree.add(frozenset((f, n)))
+            frontier = nxt
+    else:
+        keep = set(by_path)
+    if types:
+        centre = _find_page(pages, around)[0].relpath if around else None
+        keep = {k for k in keep if by_path[k].type in types or k == centre}
+
+    note = ""
+    if len(keep) > max_nodes:
+        ranked = sorted(keep, key=lambda k: (-len(adj[k] & keep), k))
+        note = f"showing the {max_nodes} best-connected of {len(keep)} pages (raise --max-nodes to see more)"
+        keep = set(ranked[:max_nodes])
+
+    ids = {rp: f"n{i}" for i, rp in enumerate(sorted(keep))}
+    out = [f"flowchart {direction}"]
+    for rp in sorted(keep):
+        p = by_path[rp]
+        label = str(p.fm.get("title") or p.stem).replace('"', "#quot;")
+        o, c = SHAPE.get(p.type, ('["', '"]'))
+        out.append(f"    {ids[rp]}{o}{label}{c}")
+    shown = (lambda a, b: a in keep and b in keep) if not around or all_edges else \
+        (lambda a, b: frozenset((a, b)) in tree)
+    drawn = set()
+    for a, b in sorted(links):
+        if shown(a, b) and (b, a) not in drawn:
+            arrow = "<-->" if (b, a) in links else "-->"
+            out.append(f"    {ids[a]} {arrow} {ids[b]}")
+            drawn.add((a, b))
+    for a, b in sorted(related):
+        if shown(a, b) and (a, b) not in drawn and (b, a) not in drawn:
+            out.append(f"    {ids[a]} -.- {ids[b]}")
+            drawn.add((a, b))
+    used = sorted({by_path[rp].type for rp in keep if by_path[rp].type in FILL})
+    for t in used:
+        out.append(f"    classDef {t.replace('-', '_')} fill:{FILL[t]},color:#1f2328")
+        members = ",".join(ids[rp] for rp in sorted(keep) if by_path[rp].type == t)
+        out.append(f"    class {members} {t.replace('-', '_')}")
+    if around:
+        out.append(f"    style {ids[_find_page(pages, around)[0].relpath]} stroke-width:3px")
+    return "\n".join(out), note
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Move — rename a page and rewrite every inbound link and `related:` entry
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _relative(from_relpath, to_relpath):
+    return os.path.relpath(to_relpath, os.path.dirname(from_relpath) or ".").replace(os.sep, "/")
+
+
+def _rewrite_line_links(line, fn):
+    """Apply fn(target) -> new target to every link on the line, outside inline code."""
+    out, pos = [], 0
+    for m in INLINE_CODE_RE.finditer(line):
+        out.append(LINK_RE.sub(lambda lm: _swap(lm, fn), line[pos:m.start()]))
+        out.append(m.group())
+        pos = m.end()
+    out.append(LINK_RE.sub(lambda lm: _swap(lm, fn), line[pos:]))
+    return "".join(out)
+
+
+def _swap(m, fn):
+    new = fn(m.group(1))
+    if new is None:
+        return m.group()
+    s, e = m.span(1)
+    return m.group()[:s - m.start()] + new + m.group()[e - m.start():]
+
+
+def _anchor(target):
+    t = target.strip()
+    return t[t.index("#"):] if "#" in t else ""
+
+
+def move(root, old, new, dry_run=False):
+    """Rename wiki page `old` to `new` (repo-relative); return a list of change descriptions."""
+    if not old.startswith("wiki" + os.sep) or not new.startswith("wiki" + os.sep) or not new.endswith(".md"):
+        raise ValueError("both paths must be .md pages under wiki/")
+    if not os.path.isfile(os.path.join(root, old)):
+        raise ValueError(f"no such page: {old}")
+    if os.path.exists(os.path.join(root, new)):
+        raise ValueError(f"already exists: {new}")
+    old_stem = os.path.splitext(os.path.basename(old))[0]
+    new_stem = os.path.splitext(os.path.basename(new))[0]
+    stem_taken = old_stem != new_stem and any(
+        os.path.splitext(os.path.basename(r))[0] == new_stem for r in iter_wiki_pages(root))
+
+    changes, writes = [], {}
+    files = list(iter_wiki_pages(root))
+    idx = "index.md"
+    if os.path.exists(os.path.join(root, idx)):
+        files.append(idx)
+
+    for rel in files:
+        path = os.path.join(root, rel)
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+        here = new if rel == old else rel           # where this file will live afterwards
+        n_links = n_rel = 0
+
+        def fix(target, rel=rel, here=here):
+            nonlocal n_links
+            r = resolve_link(root, rel, target)
+            if r is None:
+                return None
+            if r == old:
+                n_links += 1
+                return _relative(here, new) + _anchor(target)
+            if rel == old and resolve_link(root, here, target) != r:   # own links that would break
+                n_links += 1
+                return _relative(here, r) + _anchor(target)
+            return None
+
+        body = dict(_body_lines(lines))
+        fm_end = 0
+        if lines and lines[0].rstrip() == "---":
+            fm_end = next((i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), 0)
+        in_related = False
+        for i in range(len(lines)):
+            line = lines[i]
+            if 0 < i < fm_end and old_stem != new_stem and not stem_taken:
+                key = re.match(r"^(\S[^:]*?):", line)
+                if key:
+                    in_related = key.group(1).strip() == "related"
+                if in_related:
+                    new_line = re.sub(rf"(?<![\w-]){re.escape(old_stem)}(?![\w-])", new_stem, line)
+                    if new_line != line:
+                        n_rel += 1
+                        lines[i] = line = new_line
+            if (i + 1) in body:
+                lines[i] = _rewrite_line_links(line, fix)
+        if n_links or n_rel:
+            writes[rel] = lines
+            what = ", ".join(x for x in (f"{n_links} link(s)" if n_links else "",
+                                         f"{n_rel} related entry" if n_rel else "") if x)
+            changes.append(f"{rel}: {what}")
+
+    if stem_taken:
+        changes.append(f"note: stem `{new_stem}` is already used by another page, "
+                       f"so `related:` entries naming `{old_stem}` were left unchanged")
+    if not dry_run:
+        for rel, lines in writes.items():
+            with open(os.path.join(root, rel), "w", encoding="utf-8") as fh:
+                fh.writelines(lines)
+        os.makedirs(os.path.dirname(os.path.join(root, new)), exist_ok=True)
+        os.rename(os.path.join(root, old), os.path.join(root, new))
+    return changes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Reporting
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -853,6 +1092,22 @@ def main(argv=None):
     qp.add_argument("notes", nargs="*", help="source notes to check (default: all)")
     qp.add_argument("--root", help="wiki root (default: walk up for conventions.toml)")
     qp.add_argument("--min-severity", choices=["error", "warn", "info"], default="info")
+    gp = sub.add_parser("graph", help="draw the wiki's link graph as a Mermaid diagram")
+    gp.add_argument("--around", metavar="PAGE", help="centre on one page (stem, filename or path)")
+    gp.add_argument("--depth", type=int, default=1, help="link hops from --around (default 1)")
+    gp.add_argument("--type", action="append", dest="types", metavar="TYPE",
+                    help="only pages of this type (repeatable)")
+    gp.add_argument("--max-nodes", type=int, default=60, help="keep the best-connected N pages (default 60)")
+    gp.add_argument("--all-edges", action="store_true",
+                    help="with --around, also draw links between the neighbours")
+    gp.add_argument("--direction", choices=["LR", "TD"], default="LR")
+    gp.add_argument("--raw", action="store_true", help="omit the ```mermaid fence")
+    gp.add_argument("--root", help="wiki root (default: walk up for conventions.toml)")
+    mp = sub.add_parser("move", help="rename a page and rewrite every link and related: entry to it")
+    mp.add_argument("old")
+    mp.add_argument("new")
+    mp.add_argument("--dry-run", action="store_true", help="show what would change, write nothing")
+    mp.add_argument("--root", help="wiki root (default: walk up for conventions.toml)")
     args = ap.parse_args(argv)
 
     root = os.path.abspath(args.root) if args.root else find_root(os.getcwd())
@@ -882,6 +1137,35 @@ def main(argv=None):
         print(f"{t['quotes']} quotes · {t['exact']} verbatim · {t['citation']} drop a citation · "
               f"{t['missing']} differ or not found · {t['unchecked']} unchecked · {t['page']} page mismatch")
         return 1 if n_err else 0
+    if args.cmd == "graph":
+        pages = [Page(root, r) for r in sorted(iter_wiki_pages(root))]
+        if not pages:
+            print("error: the wiki has no pages yet", file=sys.stderr)
+            return 2
+        try:
+            src, note = graph(root, pages, around=args.around, depth=args.depth, types=args.types,
+                              max_nodes=args.max_nodes, direction=args.direction,
+                              all_edges=args.all_edges)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        print(src if args.raw else f"```mermaid\n{src}\n```")
+        if note:
+            print(f"note: {note}", file=sys.stderr)
+        return 0
+    if args.cmd == "move":
+        old, new = (os.path.relpath(os.path.abspath(x), root) for x in (args.old, args.new))
+        try:
+            changes = move(root, old, new, dry_run=args.dry_run)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        print(f"{'would move' if args.dry_run else 'moved'} {old} → {new}")
+        for c in changes:
+            print(f"  {c}")
+        if not changes:
+            print("  no inbound links to rewrite")
+        return 0
     return 2
 
 

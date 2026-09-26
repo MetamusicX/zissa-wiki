@@ -68,286 +68,40 @@ Finished deliverables. Never edited by the agent unless explicitly asked.
 ### archive/
 Deprecated pages, old drafts, superseded syntheses. Moved here to preserve history without cluttering active wiki.
 
+### templates/ and scripts/
+`templates/` holds one page template per type (see Page Formats). `scripts/wiki.py` is the deterministic tooling (see Tools). Neither is part of the wiki graph.
+
 ---
 
 ## Page Formats
 
-All pages use YAML frontmatter followed by markdown content. Every page must have at minimum:
+Every page uses YAML frontmatter followed by markdown content. Minimum fields:
 
 ```yaml
 ---
 title: ""
 type: ""        # source-note | concept | author | debate | synthesis | project | method | theme
 tags: []
-related: []     # 3–5 most closely related pages (relative paths); concept and author pages only
+related: []     # 3–5 most closely related pages (filename stems); concept and author pages only
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 ---
 ```
 
----
-
-### Source Note (wiki/source-notes/filename.md)
-
-```markdown
----
-title: ""
-type: source-note
-author: ""
-date: YYYY          # publication year
-source-type: article | book | chapter | transcript | note
-tags: []
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-
-# [Title]
-
-**Author:** [Author Name]
-**Year:** YYYY
-**Source type:** article | book | chapter | transcript | note
-**Raw file:** [link to raw/ file if available]
-
-## Summary
-[2-4 sentence summary of the source's central argument or content.]
-
-## Key Claims
-- [Claim 1 — be specific, not generic]
-- [Claim 2]
-- [Claim 3]
-...
-
-## Connections
-
-**Concepts:** [Link to relevant concept pages]
-**Authors:** [Link to relevant author pages]
-**Debates:** [Link to relevant debate pages]
-**Related source notes:** [Link to related source notes]
-
-## Direct Quotes
-> "[Exact quote]" (p. XX)
-
-> "[Exact quote]" (p. XX)
-
-<!-- Word for word from the raw file. Mark every omission with "…" and every insertion
-     with [brackets]. Cite the page number printed in the source, not the PDF page.
-     Add "(trans.)" to a quote you translated. `wiki.py quotes` checks all of this. -->
-
-## Open Questions
-- [Question raised by this source but not answered]
-
-## Tags
-`tag1` `tag2` `tag3`
-```
-
----
-
-### Concept Page (wiki/concepts/concept-name.md)
-
-```markdown
----
-title: ""
-type: concept
-tags: []
-related: [concept-name, author-name, concept-name]   # 3–5 closest pages; use filename stems without extension
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-
-# [Concept Name]
-
-## Definition
-[Clear, precise definition. If the concept is contested or has multiple definitions, state that explicitly.]
-
-## Key Thinkers
-- [Author Name](../authors/author-name.md) — [brief description of their version/use of this concept]
-- ...
-
-## Related Concepts
-- [Concept Name](../concepts/concept-name.md) — [how it relates]
-- ...
-
-## Source Support
-Sources in the wiki that discuss this concept:
-- [Source Note Title](../source-notes/filename.md)
-- ...
-
-## Open Questions
-- [Unresolved question about this concept]
-
-## Tags
-`tag1` `tag2` `tag3`
-```
-
----
-
-### Author Page (wiki/authors/author-name.md)
-
-```markdown
----
-title: ""
-type: author
-tags: []
-related: [concept-name, author-name, concept-name]   # 3–5 most closely related pages; use filename stems without extension
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-
-# [Author Name]
-
-## Bio Sketch
-[2-4 sentences: who they are, when they worked, disciplinary home, why they matter.]
-
-## Key Works
-- *[Title]* (YYYY) — [one-line description]
-- ...
-
-## Key Concepts
-Concepts associated with this author that have pages in this wiki:
-- [Concept Name](../concepts/concept-name.md)
-- ...
-
-## Relevance to Your Research
-[Specific explanation of why this author matters to your projects. Be concrete.]
-
-## Source Support
-Source notes in this wiki drawn from this author's work:
-- [Source Note Title](../source-notes/filename.md)
-- ...
-
-## Tags
-`tag1` `tag2` `tag3`
-```
-
----
-
-### Debate Page (wiki/debates/debate-name.md)
-
-```markdown
----
-title: ""
-type: debate
-tags: []
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-
-# [Debate Title]
-
-## Framing
-[What is this debate about? What is at stake? Why does it matter?]
-
-## Positions
-
-### Position A: [Name/Label]
-[Description of this position. Who holds it. Key arguments.]
-Key texts: [source-note links]
-
-### Position B: [Name/Label]
-[Description of this position. Who holds it. Key arguments.]
-Key texts: [source-note links]
-
-### Additional Positions (if applicable)
-...
-
-## Key Texts
-- [Source Note Title](../source-notes/filename.md) — [which position it supports]
-- ...
-
-## Current State
-[Where does the debate stand now? Is it resolved, ongoing, shifted?]
-
-## Relevance to Your Research
-[Why this debate matters for your projects specifically.]
-
-## Tags
-`tag1` `tag2` `tag3`
-```
-
----
-
-### Synthesis Page (wiki/syntheses/synthesis-name.md)
-
-```markdown
----
-title: ""
-type: synthesis
-tags: []
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-
-# [Synthesis Title]
-
-> Last updated: YYYY-MM-DD
-
-## Overview
-[What is this synthesis about? What argument or cluster of ideas is being developed here?]
-
-## Key Claims
-
-### Claim 1: [Short Label]
-[Elaboration of the claim.]
-Source support:
-- [Source Note](../source-notes/filename.md), p. XX
-- ...
-
-### Claim 2: [Short Label]
-...
-
-## Tensions and Unresolved Questions
-- [Tension between two sources or positions]
-- [Question the synthesis raises but cannot yet answer]
-
-## Connected Pages
-- [Concept pages]
-- [Debate pages]
-- [Author pages]
-
-## Tags
-`tag1` `tag2` `tag3`
-```
-
----
-
-### Project Page (wiki/projects/[name]/index.md)
-
-```markdown
----
-title: ""
-type: project
-status: active | on-hold | complete
-tags: []
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-
-# [Project Name]
-
-## Description
-[What is this project? What are you trying to do, argue, compose, or produce?]
-
-## Status
-[Current status and next steps.]
-
-## Key Concepts
-- [Concept Name](../../concepts/concept-name.md)
-- ...
-
-## Key Sources
-- [Source Note Title](../../source-notes/filename.md)
-- ...
-
-## Outputs Planned
-- [Type]: [Description]
-- ...
-
-## Notes
-[Working notes, open questions, things to follow up.]
-
-## Tags
-`tag1` `tag2` `tag3`
-```
+The full template for each page type lives in `templates/`. **Before creating a page, read its template and follow it section by section.** Do not load templates you are not about to use.
+
+| Type | Location | Template |
+|---|---|---|
+| Source note | `wiki/source-notes/author-year-short-title.md` | `templates/source-note.md` |
+| Concept | `wiki/concepts/concept-name.md` | `templates/concept.md` |
+| Author | `wiki/authors/author-name.md` | `templates/author.md` |
+| Debate | `wiki/debates/debate-name.md` | `templates/debate.md` |
+| Synthesis | `wiki/syntheses/synthesis-name.md` | `templates/synthesis.md` |
+| Project | `wiki/projects/[name]/index.md` | `templates/project.md` |
+| Method | `wiki/methods/method-name.md` | `templates/method.md` |
+| Theme | `wiki/themes/theme-name.md` | `templates/theme.md` |
+
+**Quoting rules (source notes).** Direct quotes are word for word from the raw file. Mark every omission with "…" and every insertion with [brackets]. Cite the page number printed in the source, not the PDF page. Add "(trans.)" to a quote you translated. `python3 scripts/wiki.py quotes` checks all of this.
 
 ---
 
@@ -362,14 +116,17 @@ updated: YYYY-MM-DD
 1. Locate the file in `raw/`. If it is not already in `raw/`, note that it should be moved there.
 2. Read the source in full.
 3. Discuss key takeaways with the researcher before writing anything. Identify: central argument, key claims, surprising or important moments, relevant concepts and authors, connections to existing wiki pages.
-4. Create a source-note page in `wiki/source-notes/` using the source-note template. Filename in lowercase-kebab-case: `author-year-short-title.md`.
+4. Read `templates/source-note.md`, then create the source-note page in `wiki/source-notes/`. Filename in lowercase-kebab-case: `author-year-short-title.md`.
    Then run `python3 scripts/wiki.py quotes wiki/source-notes/<file>.md` and resolve every error before going on. A quote the checker cannot find in the raw file is either misquoted — fix it against the source — or not a quote, and must not be presented as one.
 5. Update `index.md` — add the new source note to the Source Notes section.
 6. Scan the entire wiki for impact. For every concept, author, debate, theme, or project touched by this source:
    - If a page exists: open it, add the source note to its Source Support section, add any new direct quotes or claims, update the `updated` date in frontmatter.
-   - If no page exists: create a stub page with a note that it requires fuller treatment, and log it as "page needed" in `log.md`.
+   - If no page exists: create a stub page from its template with a note that it requires fuller treatment, and log it as "page needed" in `log.md`.
+
+   To find affected pages, search the wiki (`grep -ril "<term>" wiki/`) rather than reading it page by page. When many pages need updating, you may hand independent page updates to subagents in parallel — one page per subagent, never two on the same file. `index.md` and `log.md` stay with you.
 7. Check whether any syntheses should be updated.
 8. Append an entry to `log.md` in the format: `## [YYYY-MM-DD] ingest | [Source title] | [Author, Year]` listing all pages created or updated.
+9. Run `python3 scripts/wiki.py lint --min-severity error` and fix every error.
 
 A single ingest may touch 10-15 wiki pages. Do not shortcut this.
 
@@ -409,6 +166,21 @@ A single ingest may touch 10-15 wiki pages. Do not shortcut this.
 > **Mechanical checks are automated.** The deterministic subset — broken links (4), orphans (5), oversize (6), thin support (8), plus missing frontmatter and index drift — is implemented in `scripts/wiki.py` (rules in `conventions.toml`). Run `python3 scripts/wiki.py lint` to get them for free and reliably — and `python3 scripts/wiki.py quotes` to check every direct quote against its raw file — then spend your own judgement on the checks that need reading: duplicates (1), stale drift (2), contradictions (3), and weak/generic pages (7). Treat `wiki lint` passing error-free as the last step of any wiki-touching task.
 
 After linting, produce a prioritized list of issues. Do not auto-fix — present findings and let the researcher decide.
+
+---
+
+## Tools
+
+`scripts/wiki.py` does the mechanical work so you don't have to do it by hand. Use it instead of hand-scanning.
+
+| Command | Use it to |
+|---|---|
+| `python3 scripts/wiki.py lint` | check links, orphans, index drift, frontmatter (nonzero exit on any error) |
+| `python3 scripts/wiki.py quotes [NOTE]` | check direct quotes against their raw files |
+| `python3 scripts/wiki.py graph --around STEM` | draw the neighbourhood of a page as a Mermaid diagram |
+| `python3 scripts/wiki.py move OLD NEW` | rename a page and rewrite every link and `related:` entry that points to it |
+
+Never rename or move a wiki page by hand: use `wiki.py move`, or every relative link to it breaks.
 
 ---
 

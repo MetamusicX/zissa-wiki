@@ -15,8 +15,9 @@ The concept pages, author pages, source notes, and syntheses you build by ingest
 1. **Open an issue first** for anything beyond a typo — a bug, a schema improvement, a new page type, a workflow change. It's better to agree on the shape of a change before writing it.
 2. **Fork and branch.** Make your change on a branch in your fork.
 3. **Keep it focused.** One concern per pull request. A schema change and a README rewrite are two pull requests, not one.
-4. **Test against a real ingest if you touch the schema.** If you change `CLAUDE.md`, page templates, or workflows, run at least one ingest in a scratch fork and confirm Claude Code still produces well-formed pages. Note what you tested in the pull request.
-5. **Match the existing voice.** The documentation is plain, concrete, and unhyped. Keep it that way.
+4. **Run the tests if you touch `scripts/wiki.py`**: `python3 -m unittest discover tests`. Add a test for new behaviour.
+5. **Test against a real ingest if you touch the schema.** If you change `CLAUDE.md`, page templates, or workflows, run at least one ingest in a scratch fork and confirm Claude Code still produces well-formed pages. Note what you tested in the pull request.
+6. **Match the existing voice.** The documentation is plain, concrete, and unhyped. Keep it that way.
 
 ## Conventions
 

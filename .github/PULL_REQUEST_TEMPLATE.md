@@ -15,7 +15,8 @@ wiki content. See CONTRIBUTING.md.
 ## Type of change
 
 - [ ] Documentation (README, comments)
-- [ ] Schema change (`CLAUDE.md`, page templates)
+- [ ] Schema change (`CLAUDE.md`, `templates/`)
+- [ ] Tooling (`scripts/wiki.py`, `.claude/` skills or hooks)
 - [ ] Workflow change (ingest / query / lint)
 - [ ] Folder conventions / structure
 - [ ] Other:
@@ -32,3 +33,4 @@ wiki content. See CONTRIBUTING.md.
 - [ ] One focused concern per PR
 - [ ] No personal research content added to the template
 - [ ] Documentation updated if behaviour changed
+- [ ] `python3 -m unittest discover tests` passes (if `scripts/wiki.py` changed)
