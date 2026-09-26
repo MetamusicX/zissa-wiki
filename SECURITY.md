@@ -2,11 +2,12 @@
 
 ## Scope
 
-The LLM Research Wiki is a template made of plain markdown files and folders. It has **no backend, no database, no embeddings, no executable code, and no network services**. The operational logic lives in `CLAUDE.md`, which is read by [Claude Code](https://claude.ai/code) at runtime on your own machine.
+Zissa Wiki is a template made of plain markdown files and folders, plus one small standard-library Python tool (`scripts/wiki.py`) and the hooks that call it. It has **no backend, no database, no embeddings, and no network services**, and the tool never contacts a model or the internet. The operational logic lives in `AGENTS.md`, which your AI agent reads at runtime on your own machine.
 
 Because of this, the usual software attack surface is very small. The realistic concerns are:
 
-- **Prompt content in `CLAUDE.md` or page templates** that could cause an LLM agent to behave in unintended ways (for example, instructions that lead it to modify or delete `raw/` source files, which it should never do).
+- **Prompt content in `AGENTS.md` or page templates** that could cause an LLM agent to behave in unintended ways (for example, instructions that lead it to modify or delete `raw/` source files, which it should never do).
+- **`wiki.py apply` writing model output to disk.** It accepts only `wiki/**.md`, `index.md` (replaced) and `log.md` (appended), and refuses any other path, including ones that climb out with `..`. A way around that restriction is in scope.
 - **Secrets accidentally committed** into the template (none should ever be — this repo holds no credentials).
 
 ## Reporting a vulnerability

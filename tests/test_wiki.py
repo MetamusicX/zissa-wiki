@@ -265,5 +265,103 @@ class TestMove(WikiFixture):
             wiki.move(self.root, "wiki/concepts/missing.md", "wiki/concepts/y.md")
 
 
+class TestCheck(WikiFixture):
+    def git(self, *a):
+        import subprocess
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=self.root,
+                       check=True, capture_output=True)
+
+    def test_without_git_checks_everything(self):
+        text, n = wiki.check(self.root, self.cfg)
+        self.assertEqual(n, 0, text)
+        self.write("wiki/source-notes/doe-2020-individuation.md", NOTE.replace("reduced to", "limited to"))
+        text, n = wiki.check(self.root, self.cfg)
+        self.assertEqual(n, 1)
+        self.assertIn("quote-differs", text)
+
+    def test_quotes_without_a_linked_source_fail_the_check(self):
+        self.write("wiki/source-notes/doe-2020-individuation.md",
+                   NOTE.replace("**Raw file:** [doe-2020.md](../../raw/articles/doe-2020.md)", "**Raw file:** raw/articles/doe-2020.md"))
+        findings, _ = wiki.check_quotes(self.root, [wiki.Page(self.root, "wiki/source-notes/doe-2020-individuation.md")])
+        self.assertIn("quote-no-source", self.codes(findings, "warn"))
+        text, n = wiki.check(self.root, self.cfg)
+        self.assertEqual(n, 1)
+        self.assertIn("quote-no-source", text)
+
+    def test_if_changed_skips_a_clean_tree(self):
+        self.git("init", "-q")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.assertEqual(wiki.check(self.root, self.cfg, if_changed=True), ("", 0))
+        self.write("wiki/concepts/preindividual.md", PRE + "\n[gone](gone.md)\n")
+        text, n = wiki.check(self.root, self.cfg, if_changed=True)
+        self.assertEqual(n, 1)
+        self.assertIn("link-broken", text)
+        self.git("add", "-A")
+        self.assertEqual(wiki.check(self.root, self.cfg, staged=True)[1], 1)
+
+
+class TestPromptApply(WikiFixture):
+    def test_ingest_prompt_bundles_everything(self):
+        self.write("AGENTS.md", "# Schema\nNever invent citations.\n")
+        self.write("templates/concept.md", "---\ntype: concept\n---\n# [Concept Name]\n")
+        text, note = wiki.build_prompt(self.root, self.cfg, "ingest", "raw/articles/doe-2020.md")
+        for part in ("Never invent citations", "=== TEMPLATE: templates/concept.md ===", "## index.md",
+                     "=== PAGE: wiki/concepts/individuation.md ===", "preindividual.", "=== END FILE ===",
+                     "**Raw file:** [doe-2020.md](../../raw/articles/doe-2020.md)"):
+            self.assertIn(part, text)
+        self.assertEqual(note, "")
+
+    def test_prompt_trims_to_budget_by_relevance(self):
+        text, note = wiki.build_prompt(self.root, self.cfg, "query", "What is the preindividual?", budget=900)
+        self.assertIn("=== PAGE: wiki/concepts/preindividual.md ===", text)
+        self.assertNotIn("=== PAGE: wiki/source-notes/doe-2020-individuation.md ===", text)
+        self.assertIn("- wiki/source-notes/doe-2020-individuation.md — Doe 2020", text)   # still listed
+        self.assertIn("of 4 pages", note)
+
+    def test_lint_prompt_carries_tool_findings(self):
+        self.write("wiki/concepts/preindividual.md", PRE + "\n[gone](gone.md)\n")
+        text, _ = wiki.build_prompt(self.root, self.cfg, "lint")
+        self.assertIn("[link-broken]", text)
+
+    def test_apply_writes_files_and_appends_log(self):
+        self.write("log.md", "# Log\n")
+        answer = """Here you go.
+~~~~text
+=== FILE: wiki/concepts/field.md ===
+---
+title: "Field"
+type: concept
+tags: [field]
+created: 2026-01-01
+updated: 2026-01-01
+---
+# Field
+See [Preindividual](preindividual.md).
+=== END FILE ===
+=== APPEND: log.md ===
+## [2026-01-01] ingest | Field
+=== END FILE ===
+~~~~
+"""
+        changes = wiki.apply_answer(self.root, answer)
+        self.assertEqual(changes[0], "create wiki/concepts/field.md")
+        self.assertIn("See [Preindividual](preindividual.md).", self.read("wiki/concepts/field.md"))
+        self.assertTrue(self.read("log.md").endswith("## [2026-01-01] ingest | Field\n"))
+
+    def test_apply_refuses_paths_outside_the_wiki(self):
+        for path in ("raw/articles/doe-2020.md", "../escape.md", "wiki/../AGENTS.md", "scripts/wiki.py"):
+            with self.assertRaises(ValueError, msg=path):
+                wiki.apply_answer(self.root, f"=== FILE: {path} ===\nx\n=== END FILE ===\n")
+        with self.assertRaises(ValueError):
+            wiki.apply_answer(self.root, "no sections at all")
+
+    def test_round_trip_catches_a_misquote(self):
+        bad = NOTE.replace("reduced to", "limited to")
+        wiki.apply_answer(self.root, f"=== FILE: wiki/source-notes/doe-2020-individuation.md ===\n{bad}=== END FILE ===\n")
+        _, n = wiki.check(self.root, self.cfg)
+        self.assertEqual(n, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,7 @@ body:
     id: what-happened
     attributes:
       label: What happened?
-      description: What did Claude Code (or the template) do, and what did you expect instead?
+      description: What did the agent (or the template) do, and what did you expect instead?
       placeholder: "When I ran 'ingest …', the agent modified a file in raw/, which the schema says it should never do."
     validations:
       required: true
@@ -30,13 +30,13 @@ body:
     attributes:
       label: Where in the template?
       description: Which file or section is involved, if you know.
-      placeholder: "CLAUDE.md — Workflow 1: INGEST, step 6"
+      placeholder: "AGENTS.md — Workflow 1: INGEST, step 6"
     validations:
       required: false
   - type: textarea
     id: context
     attributes:
       label: Environment
-      description: Claude Code version / interface (terminal, VS Code, desktop), and anything else relevant.
+      description: Which agent and model (e.g. Claude Code, Codex CLI with GPT-5, OpenCode with DeepSeek, ChatGPT via wiki.py prompt), its version, and anything else relevant.
     validations:
       required: false

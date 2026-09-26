@@ -15,15 +15,15 @@ wiki content. See CONTRIBUTING.md.
 ## Type of change
 
 - [ ] Documentation (README, comments)
-- [ ] Schema change (`CLAUDE.md`, `templates/`)
-- [ ] Tooling (`scripts/wiki.py`, `.claude/` skills or hooks)
+- [ ] Schema change (`AGENTS.md`, `templates/`)
+- [ ] Tooling (`scripts/wiki.py`, hooks, agent-specific extras)
 - [ ] Workflow change (ingest / query / lint)
 - [ ] Folder conventions / structure
 - [ ] Other:
 
 ## If this touches the schema or a workflow
 
-- [ ] I ran at least one ingest in a scratch fork and confirmed Claude Code still produces well-formed pages
+- [ ] I ran at least one ingest in a scratch fork and confirmed the agent still produces well-formed pages (say which agent and model)
 - [ ] I described what I tested below
 
 <!-- What did you test, and what was the result? -->
