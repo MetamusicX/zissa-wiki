@@ -1,0 +1,8 @@
+#!/bin/sh
+# Refuse a commit whose wiki changes break a link or misquote a source.
+# Works whichever agent (or person) made the change. Enable once per clone:
+#   git config core.hooksPath .githooks
+# Bypass in an emergency with: git commit --no-verify
+command -v python3 >/dev/null 2>&1 || exit 0
+root=$(git rev-parse --show-toplevel)
+exec python3 "$root/scripts/wiki.py" check --staged --if-changed --root "$root"

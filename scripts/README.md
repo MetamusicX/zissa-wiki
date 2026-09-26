@@ -2,7 +2,7 @@
 
 > *The tool is the hands; the agent is the head.* — the [engram](https://github.com/jeromeetienne/engram) philosophy, adapted here.
 
-The wiki's schema (`CLAUDE.md`) already **specifies** every mechanical check —
+The wiki's schema (`AGENTS.md`) already **specifies** every mechanical check —
 broken links, orphans, index drift, missing frontmatter. But running those by
 having the *agent* hand-scan every page is slow, token-expensive, and easy to
 get wrong. This script moves the mechanical half out of the model into
@@ -89,7 +89,8 @@ where the two part and what the source actually reads:
 | `quote-missing` | **error** | nothing in the raw file resembles the quote (paraphrase? wrong file?) |
 | `quote-citation` | warn | the quote silently drops an in-text citation such as "(Krohn 2010: 31–2)" |
 | `quote-page` | warn | the cited page does not hold the passage, or the note cites PDF page numbers throughout |
-| `quote-unchecked` | info | no raw file linked, file absent, no text layer (scanned PDF), translation, or too short |
+| `quote-no-source` | warn (**error** in `wiki check`) | the note quotes but links no raw file, so nothing can be checked |
+| `quote-unchecked` | info | raw file absent, no text layer (scanned PDF), translation, or too short |
 
 **Page numbers.** A PDF's page 63 is often the book's printed page 45. The
 checker reads the page numbers the PDF itself prints to learn the offset; when a
@@ -140,14 +141,56 @@ python3 scripts/wiki.py move wiki/concepts/transduction.md wiki/concepts/transdu
 It refuses to overwrite an existing page. `log.md` is history and is left as
 written. Links inside code are examples and are left alone.
 
+## `wiki check` — the finishing check
+
+One command for the end of every wiki-changing task, whatever agent did the work:
+lint errors across the wiki, plus the quote check on each source note changed since
+the last commit (or on every note, outside git). Exits nonzero on any error.
+
+```bash
+python3 scripts/wiki.py check                         # before an agent says it is done
+python3 scripts/wiki.py check --staged --if-changed   # what .githooks/pre-commit runs
+```
+
+`--if-changed` does nothing when no wiki file has changed, so errors that were
+already there never hold up unrelated work. The same command backs the git
+pre-commit hook (`git config core.hooksPath .githooks`), the Claude Code Stop hook,
+and `wiki apply`.
+
+## `wiki prompt` / `wiki apply` — the workflows in any chat app
+
+For models you reach only through a chat window (ChatGPT, Grok, Le Chat, DeepSeek,
+Kimi, Claude.ai…). `prompt` writes one self-contained message: the `AGENTS.md`
+schema, the task, the answer format, the page templates (for ingest), `index.md`, a
+catalogue of every page, the page contents, and the source text. PDF sources are
+given with their printed page numbers, so the model can cite them correctly. `apply`
+reads the model's reply and writes the files back.
+
+```bash
+python3 scripts/wiki.py prompt ingest raw/articles/smith-2020.pdf > prompt.md
+python3 scripts/wiki.py prompt query "How does Simondon define transduction?"
+python3 scripts/wiki.py prompt lint                    # carries the lint + quotes findings along
+python3 scripts/wiki.py apply answer.md --dry-run      # or pipe the reply in on stdin
+```
+
+The reply format is one code block (so the chat's copy button yields the raw
+text) of `=== FILE: path ===` … `=== END FILE ===` sections, plus `=== APPEND: log.md ===`
+for the log. `apply` accepts only `wiki/**.md`, `index.md` and `log.md`, then runs
+`wiki check` and prints any error to paste back into the chat.
+
+If the wiki is larger than `--budget` characters (default 200,000, roughly 50k tokens),
+`prompt` includes the pages whose title, stem or tags share the most words with the
+source or question. `--include PAGE` forces a page in. The size of the prompt is
+reported on stderr.
+
 ## Tests
 
 ```bash
 python3 -m unittest discover tests
 ```
 
-The suite builds a small wiki in a temporary folder and exercises `lint`,
-`quotes`, `graph` and `move` against it. It also checks that the template itself
+The suite builds a small wiki in a temporary folder and exercises every
+command against it. It also checks that the template itself
 lints clean, both empty and after its first page. CI runs it on Python 3.9 and 3.13.
 
 ## Configuration — `conventions.toml`
@@ -157,7 +200,7 @@ frontmatter (base + per-type), the folder↔type map, the `source-type` enum,
 `related` bounds, size caps, staleness thresholds, the index's tracked types,
 and skip-lists. The linter is **schema-agnostic** — it does exactly what that
 file says, so the same script serves this template and any specialised fork.
-Edit the TOML to retune the checks; keep it in sync with `CLAUDE.md`.
+Edit the TOML to retune the checks; keep it in sync with `AGENTS.md`.
 
 **Epistemic markers are opt-in.** This template ships without them. If you adopt
 a provenance-tagging convention (e.g. `[P]` for your own research claims, `[W]`
@@ -166,8 +209,8 @@ for the wiki's cross-source synthesis), uncomment the `[markers]` block in
 
 ## Roadmap
 
-The CLI is built as a subcommand seam: `lint`, `quotes`, `graph` and `move`
-so far. Natural next tenants, in rough priority order:
+The CLI is built as a subcommand seam: `check`, `lint`, `quotes`, `graph`,
+`move`, `prompt` and `apply` so far. Natural next tenants, in rough priority order:
 
 - `wiki search <query>` — BM25 over frontmatter + body, an index-fallback for query.
 - `wiki whois <name>` — resolve an author name/alias to its page.

@@ -6,7 +6,7 @@ Everything mechanically checkable — link integrity, orphans, index drift, miss
 frontmatter, and (optionally) epistemic-register markers — lives here as
 deterministic code, so the agent stops hand-scanning every page for it.
 
-The prose schema stays in CLAUDE.md; the data-shaped rules live in conventions.toml.
+The prose schema stays in AGENTS.md; the data-shaped rules live in conventions.toml.
 This linter is schema-agnostic: behaviour is driven entirely by conventions.toml,
 so the same script serves both this template and a fully specialised wiki.
 
@@ -15,6 +15,9 @@ Usage:
     python3 scripts/wiki.py quotes [NOTE ...] [--root PATH] [--min-severity error|warn|info]
     python3 scripts/wiki.py graph [--around PAGE] [--depth N] [--type TYPE] [--all-edges] [--raw]
     python3 scripts/wiki.py move OLD NEW [--dry-run]
+    python3 scripts/wiki.py check [--staged] [--if-changed]
+    python3 scripts/wiki.py prompt ingest|query|lint [ARG] [--budget N] [--include PAGE]
+    python3 scripts/wiki.py apply [ANSWER_FILE] [--dry-run]
 
 Exit code is nonzero when any ERROR-tier finding is present, so this can gate a
 commit or CI ("lint must pass error-free as the last step of any wiki-touching task").
@@ -26,7 +29,11 @@ letters only, so punctuation, spacing and PDF extraction noise never count. PDFs
 `pdftotext` (poppler); .md/.txt/.html/.docx/.epub are read with the stdlib.
 
 `graph` prints the link graph as a Mermaid diagram; `move` renames a page and rewrites
-every link and `related:` entry that points to it.
+every link and `related:` entry that points to it. `check` is the finishing check any
+agent runs before it is done (lint errors + quotes in changed source notes). `prompt` and
+`apply` let the workflows run in any chat app with no file access: `prompt` bundles the
+schema, templates, index, pages and source into one message; `apply` writes the model's
+answer back and runs `check`. The tool is model-agnostic: it never calls a model itself.
 
 Roadmap (not yet implemented — this is the seam to grow the CLI along):
     wiki search <query>     BM25 over frontmatter + body
@@ -407,7 +414,7 @@ def lint(root, cfg, type_filter=None):
                 if p.type in tracked and p.relpath not in indexed and not p.is_project_index:
                     add("info", "index-drift", p.relpath, "not linked from the index")
 
-        # broken links inside root meta files (index.md, README.md, CLAUDE.md) — not log.md
+        # broken links inside root meta files (index.md, README.md, AGENTS.md…) — not log.md
         for meta in noninbound:
             if meta in no_linkcheck:
                 continue
@@ -743,8 +750,14 @@ def check_quotes(root, notes):
                 problems.append(f"`{r}`: {cache[path]}")
             else:
                 docs.append(cache[path])
+        if not docs and not problems:                   # nothing to check against: the note's fault
+            add("warn", "quote-no-source", p.relpath,
+                f"{len(quotes)} quote(s) cannot be checked — the note links no raw file "
+                f"(add e.g. **Raw file:** [name](../../raw/articles/name.pdf))")
+            tally["unchecked"] += len(quotes)
+            continue
         if not docs:
-            why = "; ".join(problems) if problems else "the note links no raw file"
+            why = "; ".join(problems)
             add("info", "quote-unchecked", p.relpath, f"{len(quotes)} quote(s) not checked — {why}")
             tally["unchecked"] += len(quotes)
             continue
@@ -1046,6 +1059,217 @@ def move(root, old, new, dry_run=False):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Check — the finishing check any agent (or a git hook) runs before it is done
+# ─────────────────────────────────────────────────────────────────────────────
+
+def changed_files(root, staged=False):
+    """Wiki files changed since the last commit (or staged for the next), or None
+    when root is not a git checkout."""
+    if staged:
+        cmd = ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "--", "wiki", "index.md"]
+    else:
+        cmd = ["git", "status", "--porcelain", "--untracked-files=all", "--", "wiki", "index.md"]
+    try:
+        out = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    lines = out.stdout.splitlines()
+    if not staged:
+        lines = [ln[3:].split(" -> ")[-1] for ln in lines]
+    return [ln.strip().strip('"') for ln in lines if ln.strip()]
+
+
+def check(root, cfg, staged=False, if_changed=False):
+    """Lint errors, plus quote errors in changed source notes. Returns (output, n_errors)."""
+    changed = changed_files(root, staged)
+    if if_changed and changed == []:
+        return "", 0
+    lint_findings, npages = lint(root, cfg)
+    if changed is None:                                # no git: check every source note
+        notes = [Page(root, r) for r in sorted(iter_wiki_pages(root))]
+    else:
+        notes = [Page(root, c.replace("/", os.sep)) for c in changed
+                 if c.startswith("wiki/source-notes/") and c.endswith(".md") and os.path.exists(os.path.join(root, c))]
+    notes = [n for n in notes if n.type == "source-note" or n.segment == "source-notes"]
+    quote_findings, _ = check_quotes(root, notes)
+    for f in quote_findings:                           # a quoting note must name its source
+        if f.code == "quote-no-source":
+            f.sev = "error"
+    errors = [f for f in lint_findings + quote_findings if f.sev == "error"]
+    errors.sort(key=lambda f: (f.code, f.relpath, f.line))
+    scope = "all source notes" if changed is None else f"{len(notes)} changed source note(s)"
+    lines = [f"  {f.loc()}  [{f.code}] {f.msg}" for f in errors]
+    head = f"wiki check: {npages} pages linted, quotes checked in {scope} — {len(errors)} error(s)"
+    return "\n".join([head] + lines), len(errors)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompt / apply — run the workflows in any chat app, with no file access
+# ─────────────────────────────────────────────────────────────────────────────
+
+FILE_RE = re.compile(r"^=== (FILE|APPEND): (.+?) ===\s*\n(.*?)^=== END FILE ===\s*$", re.M | re.S)
+
+ANSWER_FORMAT = """## How to answer
+
+The researcher cannot give you file access, so a tool writes your answer into the wiki.
+First reply in plain prose (workflow step 3 for an ingest). When the researcher says go,
+reply with **one** code block opened by `~~~~text` and closed by `~~~~`, holding every file
+you create or change, each written out **in full**:
+
+~~~~text
+=== FILE: wiki/concepts/example-concept.md ===
+---
+title: "Example Concept"
+...the complete file...
+=== END FILE ===
+=== APPEND: log.md ===
+## [YYYY-MM-DD] ingest | Title | Author, Year
+...the new log entry only...
+=== END FILE ===
+~~~~
+
+- Paths are relative to the wiki root. Only `wiki/**.md`, `index.md` and `log.md` are accepted.
+- Rewrite `index.md` in full when you change it. For `log.md` give only the entry to append.
+- Nothing inside the block but these file sections. The researcher copies it with the
+  code block's copy button and runs `python3 scripts/wiki.py apply`, which also checks your
+  links and quotes, so write every quote exactly as it stands in the source below.
+"""
+
+TASKS = {
+    "ingest": "Run **Workflow 1: INGEST** on the source at the end of this message. You cannot run "
+              "`wiki.py` yourself; `wiki.py apply` runs the checks when your files are written back. "
+              "In the source note, give the raw file exactly as this link, which the quote check follows: "
+              "`**Raw file:** [{name}](../../{arg})`",
+    "query": "Run **Workflow 2: QUERY** on this question, using only the wiki pages below:\n\n> {arg}\n\n"
+             "Answer in prose. Use the file format only if the researcher asks you to save the answer "
+             "as a synthesis page.",
+    "lint": "Run **Workflow 3: LINT**. The mechanical findings from `wiki.py` are below: don't re-check "
+            "those. Spend your reading on duplicates, contradictions, stale drift and weak pages. "
+            "Fix nothing: report the prioritised list.",
+}
+
+
+def _words(text):
+    return set(re.findall(r"[a-z]{4,}", _strip_accents(text.lower())))
+
+
+def _strip_accents(s):
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+
+def _read(root, rel):
+    with open(os.path.join(root, rel), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _source_text(root, rel):
+    """A raw file's text for a prompt, with page markers when the format has pages."""
+    doc = read_raw(os.path.join(root, rel))
+    if not doc.paged:
+        return doc.raw[0].strip()
+    offset = doc.printed_offset()
+    parts = []
+    for n, text in enumerate(doc.raw, 1):
+        label = f"p. {n + offset}" if offset is not None else f"PDF page {n}"
+        parts.append(f"[{label}]\n{text.strip()}")
+    return "\n\n".join(parts)
+
+
+def build_prompt(root, cfg, workflow, arg="", budget=200_000, include=()):
+    """Return (prompt text, note) bundling everything a chat model needs for one workflow."""
+    schema = _read(root, "AGENTS.md") if os.path.exists(os.path.join(root, "AGENTS.md")) else ""
+    pages = [Page(root, r) for r in sorted(iter_wiki_pages(root))]
+    out = [f"# Research wiki task: {workflow}",
+           "You are the agent for a research wiki kept as markdown files. You cannot read or write "
+           "those files: everything you need is in this message, and a tool will write your answer back.",
+           "## Your instructions (AGENTS.md)", schema.strip(),
+           "## Task", TASKS[workflow].format(arg=arg.replace(os.sep, "/"), name=os.path.basename(arg))]
+    focus = ""
+    if workflow == "ingest":
+        try:
+            focus = _source_text(root, arg)
+        except (_Unreadable, OSError) as e:
+            raise ValueError(f"cannot read {arg}: {e}")
+    elif workflow == "query":
+        focus = arg
+    else:
+        lint_f, _ = lint(root, cfg)
+        quote_f, _ = check_quotes(root, [p for p in pages if p.type == "source-note"])
+        found = "\n".join(f"- {f.sev} {f.loc()} [{f.code}] {f.msg}" for f in lint_f + quote_f) or "- none"
+        out += ["## Mechanical findings (wiki.py lint + quotes)", found]
+    if workflow in ("ingest", "query"):
+        out.append(ANSWER_FORMAT)
+    if workflow == "ingest":
+        out.append("## Page templates")
+        for name in sorted(os.listdir(os.path.join(root, "templates"))) if os.path.isdir(os.path.join(root, "templates")) else []:
+            if name.endswith(".md"):
+                out.append(f"=== TEMPLATE: templates/{name} ===\n{_read(root, os.path.join('templates', name)).strip()}")
+    if os.path.exists(os.path.join(root, "index.md")):
+        out += ["## index.md", _read(root, "index.md").strip()]
+
+    # pages: everything if it fits, else the most relevant to the source / question
+    wanted = {p.relpath for p in pages for k in include if k in (p.relpath, p.stem, os.path.basename(p.relpath))}
+    texts = {p.relpath: "".join(p.lines) for p in pages}
+    keep, note = [p.relpath for p in pages], ""
+    if sum(len(t) for t in texts.values()) + len(focus) > budget:
+        fw = _words(focus)
+        score = {p.relpath: (p.relpath in wanted, len(_words(f"{p.fm.get('title', '')} {p.stem} {p.fm.get('tags', '')}") & fw))
+                 for p in pages}
+        keep, used = [], len(focus)
+        for rel in sorted(texts, key=lambda r: (score[r][0], score[r][1]), reverse=True):
+            if used + len(texts[rel]) <= budget or score[rel][0]:
+                keep.append(rel)
+                used += len(texts[rel])
+        note = f"included {len(keep)} of {len(pages)} pages (raise --budget, or --include a page, for more)"
+    if pages:
+        out.append("## All wiki pages (path — title)")
+        out.append("\n".join(f"- {p.relpath.replace(os.sep, '/')} — {p.fm.get('title', p.stem)}" for p in pages))
+        out.append(f"## Page contents ({len(keep)} of {len(pages)})")
+        out += [f"=== PAGE: {rel.replace(os.sep, '/')} ===\n{texts[rel].strip()}" for rel in sorted(keep)]
+    else:
+        out.append("## Page contents\n\nThe wiki has no pages yet.")
+    if workflow == "ingest":
+        out += [f"## Source: {arg}", focus]
+    return "\n\n".join(out) + "\n", note
+
+
+def parse_answer(text):
+    """Return [(mode, path, content)] from a chat answer in the ANSWER_FORMAT, or raise ValueError."""
+    blocks = [(m.group(1), m.group(2).strip().strip("`"), m.group(3)) for m in FILE_RE.finditer(text)]
+    if not blocks:
+        raise ValueError("no `=== FILE: … ===` sections found in the answer")
+    for mode, path, _ in blocks:
+        norm = os.path.normpath(path)
+        ok = (mode == "FILE" and (norm == "index.md" or (norm.startswith("wiki" + os.sep) and norm.endswith(".md")))) \
+            or (mode == "APPEND" and norm == "log.md")
+        if not ok or norm.startswith("..") or os.path.isabs(path):
+            raise ValueError(f"refusing `{mode}: {path}` — only wiki/**.md and index.md (FILE) or log.md (APPEND)")
+    return blocks
+
+
+def apply_answer(root, text, dry_run=False):
+    """Write a chat answer's files into the wiki. Returns a list of change descriptions."""
+    changes = []
+    for mode, path, content in parse_answer(text):
+        dest = os.path.join(root, os.path.normpath(path))
+        body = content.rstrip("\n") + "\n"
+        if mode == "APPEND":
+            changes.append(f"append {path} (+{body.count(chr(10))} lines)")
+            if not dry_run:
+                with open(dest, "a", encoding="utf-8") as fh:
+                    fh.write("\n" + body)
+            continue
+        changes.append(f"{'update' if os.path.exists(dest) else 'create'} {path}")
+        if not dry_run:
+            os.makedirs(os.path.dirname(dest) or root, exist_ok=True)
+            with open(dest, "w", encoding="utf-8") as fh:
+                fh.write(body)
+    return changes
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Reporting
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1108,6 +1332,20 @@ def main(argv=None):
     mp.add_argument("new")
     mp.add_argument("--dry-run", action="store_true", help="show what would change, write nothing")
     mp.add_argument("--root", help="wiki root (default: walk up for conventions.toml)")
+    cp = sub.add_parser("check", help="finishing check: lint errors + quotes in changed source notes")
+    cp.add_argument("--staged", action="store_true", help="look at staged files (for a git pre-commit hook)")
+    cp.add_argument("--if-changed", action="store_true", help="do nothing when no wiki file has changed")
+    cp.add_argument("--root", help="wiki root (default: walk up for conventions.toml)")
+    pp = sub.add_parser("prompt", help="bundle a workflow into one message for any chat app (no file access needed)")
+    pp.add_argument("workflow", choices=["ingest", "query", "lint"])
+    pp.add_argument("arg", nargs="?", default="", help="ingest: the raw file; query: the question")
+    pp.add_argument("--budget", type=int, default=200_000, help="max characters of wiki pages to include (default 200000)")
+    pp.add_argument("--include", action="append", default=[], metavar="PAGE", help="always include this page (repeatable)")
+    pp.add_argument("--root", help="wiki root (default: walk up for conventions.toml)")
+    ap_ = sub.add_parser("apply", help="write a chat model's answer (=== FILE: … === sections) into the wiki, then check")
+    ap_.add_argument("answer", nargs="?", default="-", help="file holding the answer (default: stdin)")
+    ap_.add_argument("--dry-run", action="store_true", help="show what would be written, write nothing")
+    ap_.add_argument("--root", help="wiki root (default: walk up for conventions.toml)")
     args = ap.parse_args(argv)
 
     root = os.path.abspath(args.root) if args.root else find_root(os.getcwd())
@@ -1153,6 +1391,45 @@ def main(argv=None):
         if note:
             print(f"note: {note}", file=sys.stderr)
         return 0
+    if args.cmd == "check":
+        text, n_err = check(root, _load_toml(cfg_path), staged=args.staged, if_changed=args.if_changed)
+        if text:
+            print(text)
+        return 1 if n_err else 0
+    if args.cmd == "prompt":
+        if args.workflow in ("ingest", "query") and not args.arg:
+            print(f"error: `prompt {args.workflow}` needs {'a raw file' if args.workflow == 'ingest' else 'a question'}",
+                  file=sys.stderr)
+            return 2
+        arg = args.arg
+        if args.workflow == "ingest":
+            arg = os.path.relpath(os.path.abspath(arg), root)
+        try:
+            text, note = build_prompt(root, _load_toml(cfg_path), args.workflow, arg,
+                                      budget=args.budget, include=args.include)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        sys.stdout.write(text)
+        print(f"prompt: {len(text):,} characters (~{len(text) // 4:,} tokens)" + (f"; {note}" if note else ""),
+              file=sys.stderr)
+        return 0
+    if args.cmd == "apply":
+        src = sys.stdin.read() if args.answer == "-" else open(args.answer, encoding="utf-8").read()
+        try:
+            changes = apply_answer(root, src, dry_run=args.dry_run)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        for c in changes:
+            print(f"{'would ' if args.dry_run else ''}{c}")
+        if args.dry_run:
+            return 0
+        text, n_err = check(root, _load_toml(cfg_path))
+        print("\n" + text)
+        if n_err:
+            print("\nPaste these errors back into the chat and ask for corrected files, then apply again.")
+        return 1 if n_err else 0
     if args.cmd == "move":
         old, new = (os.path.relpath(os.path.abspath(x), root) for x in (args.old, args.new))
         try:

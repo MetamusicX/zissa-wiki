@@ -6,9 +6,9 @@
 [![release](https://img.shields.io/github/v/release/MetamusicX/zissa-wiki)](https://github.com/MetamusicX/zissa-wiki/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![python 3.9+](https://img.shields.io/badge/python-3.9%2B-informational)](scripts/README.md)
-[![built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757)](https://claude.ai/code)
+[![works with any LLM agent](https://img.shields.io/badge/works%20with-any%20LLM%20agent-8b5cf6)](#works-with-any-model)
 
-Zissa Wiki is a personal knowledge base for academic research, kept in plain markdown and maintained by [Claude Code](https://claude.ai/code). You drop a source into `raw/` and say `/ingest`. Claude reads it, writes a source note, and updates every concept, author, debate and project page the source touches. Every direct quote is then checked, word for word, against the file it came from.
+Zissa Wiki is a personal knowledge base for academic research, kept in plain markdown and maintained by the AI agent of your choice: Claude Code, Codex, Gemini CLI, Cursor, an open-source agent running DeepSeek, Kimi, Qwen or Mistral, or a plain chat window in ChatGPT, Grok, Le Chat or DeepSeek. You drop a source into `raw/` and say *ingest*. The agent reads it, writes a source note, and updates every concept, author, debate and project page the source touches. Every direct quote is then checked, word for word, against the file it came from.
 
 It implements [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): rather than re-deriving knowledge from raw documents on every question (RAG), the model builds a **persistent, interlinked wiki** that compounds with each source. No database, no embeddings, no plugins.
 
@@ -19,15 +19,43 @@ It implements [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpa
 ```bash
 git clone https://github.com/MetamusicX/zissa-wiki.git my-wiki
 cd my-wiki
-claude
+git config core.hooksPath .githooks     # optional: refuse commits that break links or misquote
 ```
 
-Then, inside Claude Code:
+Then open the folder in your agent (`claude`, `codex`, `gemini`, Cursor…), or use a chat app as described [below](#in-any-chat-app).
 
-1. Fill in the **Domain Context** at the end of `CLAUDE.md`: your research areas and key thinkers.
-2. Write a 2–3 page research map in your own words, save it as `raw/notes/research-map.md`, and run `/ingest raw/notes/research-map.md`. This seeds the wiki with *your* conceptual framework.
-3. Add real sources one at a time with `/ingest raw/articles/<file>.pdf`, and supervise the first 5–10 closely.
-4. Ask questions with `/query <question>`, and audit with `/lint` every 10–15 ingests.
+1. Fill in the **Domain Context** at the end of `AGENTS.md`: your research areas and key thinkers.
+2. Write a 2–3 page research map in your own words, save it as `raw/notes/research-map.md`, and say **"ingest raw/notes/research-map.md"**. This seeds the wiki with *your* conceptual framework.
+3. Add real sources one at a time (**"ingest raw/articles/&lt;file&gt;.pdf"**), and supervise the first 5–10 closely.
+4. Ask research questions in plain language, and say **"lint"** every 10–15 ingests.
+
+## Works with any model
+
+The schema lives in [`AGENTS.md`](AGENTS.md), the cross-tool convention for agent instructions. Nothing in it depends on one vendor, and `scripts/wiki.py` never calls a model: it only reads and checks files. So the wiki is portable. Switch models whenever you like, and the pages, rules and checks stay the same.
+
+| You use | Start with | It reads the schema from |
+|---|---|---|
+| **Claude Code** | `claude`, then `/ingest`, `/query`, `/lint` | `CLAUDE.md`, which imports `AGENTS.md` |
+| **Codex CLI** (OpenAI) | `codex`, then "ingest raw/…" | `AGENTS.md` |
+| **Gemini CLI** | `gemini`, then "ingest raw/…" | `GEMINI.md`, which imports `AGENTS.md` |
+| **Cursor, GitHub Copilot agent** and other IDE agents | the agent chat, "ingest raw/…" | `AGENTS.md` |
+| **Any model through an open-source agent**, e.g. [OpenCode](https://opencode.ai) with DeepSeek, Kimi, Qwen, Grok, Mistral or a local model | the agent, "ingest raw/…" | `AGENTS.md` |
+| **A chat app**: ChatGPT, Grok, Le Chat, DeepSeek, Kimi, Claude.ai… | `wiki.py prompt`, paste, then `wiki.py apply` | the prompt itself |
+
+Tested end to end with Claude Code, Codex CLI and, through the chat-app route, a Mistral model: each ingest produced well-formed pages that passed `wiki.py check`.
+
+### In any chat app
+
+A chat app can't open your files, so `wiki.py` carries them across. `prompt` bundles the schema, the page templates, `index.md`, the relevant wiki pages and the full source text into one message. `apply` writes the model's reply back into the wiki and checks it:
+
+```bash
+python3 scripts/wiki.py prompt ingest raw/articles/smith-2020.pdf | pbcopy   # 1. copy the prompt
+#   2. paste it into the chat, discuss the takeaways, say "go",
+#      then copy the one code block the model replies with
+pbpaste | python3 scripts/wiki.py apply                                     # 3. write the pages, then check
+```
+
+If `apply` finds a broken link or a misquote, paste its report back into the chat, ask for corrected files, and apply again. `prompt query "…"` and `prompt lint` work the same way. When the wiki outgrows the model's context window, `prompt` includes the pages most relevant to the source or question: set the size with `--budget`, and force a page in with `--include`. On Linux use `xclip -selection clipboard` (and `xclip -o`); on Windows, `clip` and `Get-Clipboard`.
 
 ## How it works
 
@@ -35,13 +63,13 @@ Then, inside Claude Code:
 %%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart LR
     you(["You"])
-    agent["<b>Claude Code</b><br/>follows CLAUDE.md<br/>/ingest · /query · /lint"]
-    tool["<b>scripts/wiki.py</b><br/>lint · quotes · graph · move"]
+    agent["<b>Your agent</b><br/>Claude · Codex · Gemini · any chat app<br/>follows AGENTS.md"]
+    tool["<b>scripts/wiki.py</b><br/>check · lint · quotes · graph · move"]
 
     subgraph RAW["raw/ · you add"]
         src[("Sources<br/>PDF · EPUB · notes<br/>transcripts · images")]
     end
-    subgraph WIKI["wiki/ · Claude writes"]
+    subgraph WIKI["wiki/ · the agent writes"]
         sn["Source notes"]
         pages["Concepts · Authors · Debates<br/>Methods · Themes · Projects"]
         syn["Syntheses"]
@@ -68,25 +96,25 @@ flowchart LR
 | Layer | Contents | Who writes it |
 |---|---|---|
 | **`raw/`** | Immutable sources: articles, books, chapters, notes, transcripts, annotations, images | You |
-| **`wiki/`** | Interlinked markdown pages: source notes, concepts, authors, debates, syntheses, projects | Claude |
-| **schema** | `CLAUDE.md` (the rules), `templates/` (one per page type), `index.md` (clusters), `log.md` (history) | You and Claude |
+| **`wiki/`** | Interlinked markdown pages: source notes, concepts, authors, debates, syntheses, projects | The agent |
+| **schema** | `AGENTS.md` (the rules), `templates/` (one per page type), `index.md` (clusters), `log.md` (history) | You and the agent |
 
 Raw sources are read once and never modified. The wiki is the layer that answers questions.
 
 ## The three workflows
 
-The rules live in [`CLAUDE.md`](CLAUDE.md), which Claude Code loads at the start of every session. Each workflow is also a slash command, defined in [`.claude/skills/`](.claude/skills).
+The rules live in [`AGENTS.md`](AGENTS.md), which your agent loads at the start of every session. You start each workflow in plain language ("ingest …", a question, "lint"). In Claude Code they are also slash commands.
 
-### `/ingest`: one source in, 10–15 pages updated
+### Ingest: one source in, 10–15 pages updated
 
 ```mermaid
 sequenceDiagram
     actor You
-    participant C as Claude Code
+    participant C as Your agent
     participant W as wiki/ · index · log
     participant T as wiki.py
 
-    You->>C: /ingest raw/articles/smith-2020.pdf
+    You->>C: ingest raw/articles/smith-2020.pdf
     C->>C: read the source in full
     C-->>You: central argument, key claims, pages it will touch
     You->>C: go ahead
@@ -98,15 +126,14 @@ sequenceDiagram
         C->>W: concept, author, debate and project pages
     end
     C->>W: index.md and log.md
-    Note over C,T: Stop hook: lint + quotes must pass
-    C->>T: lint
+    C->>T: check (lint + quotes)
     T-->>C: 0 errors
     C-->>You: 12 pages created or updated
 ```
 
-Claude discusses the source with you **before writing anything**. It reads each page template only when it is about to write that kind of page, and on large ingests it can hand independent page updates to parallel subagents.
+The agent discusses the source with you **before writing anything**. It reads each page template only when it is about to write that kind of page. If your tool supports subagents, a large ingest can hand independent page updates to them in parallel.
 
-### `/query`: answers from the wiki, at constant cost
+### Query: answers from the wiki, at constant cost
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 400}}}%%
@@ -125,15 +152,15 @@ A flat index gets slow past ~50 pages. So queries run a three-step cascade:
 
 1. **Concept clusters.** `index.md` groups concepts into 4–6 thematic clusters per domain, and a query picks its cluster first.
 2. **Synthesis pages.** A cluster's pre-digested overview in `wiki/syntheses/`. One page read instead of six.
-3. **`related:` fields.** Every concept and author page lists its 3–5 closest neighbours, so Claude can move between pages without re-scanning the index.
+3. **`related:` fields.** Every concept and author page lists its 3–5 closest neighbours, so the agent can move between pages without re-scanning the index.
 
 Each step narrows the reading set, which keeps query cost roughly constant at 100+ pages.
 
-### `/lint`: the tool is the hands, the agent is the head
+### Lint: the tool is the hands, the agent is the head
 
-Mechanical checks run as deterministic Python; judgement checks are left to Claude. The result is one prioritised list, and nothing is fixed without your say.
+Mechanical checks run as deterministic Python; judgement checks are left to the agent. The result is one prioritised list, and nothing is fixed without your say.
 
-| `wiki.py` checks, exactly and for free | Claude judges, by reading |
+| `wiki.py` checks, exactly and for free | The agent judges, by reading |
 |---|---|
 | broken links, orphan pages, index drift | duplicate pages |
 | missing or invalid frontmatter | contradictions between pages |
@@ -142,7 +169,7 @@ Mechanical checks run as deterministic Python; judgement checks are left to Clau
 
 ## Quotes you can trust
 
-`CLAUDE.md` tells the agent never to invent a citation. `wiki.py quotes` enforces it. For each source note it finds the linked raw file (PDF, EPUB, DOCX, HTML, markdown, text) and checks that every quote appears in it. Only the letters are compared, so PDF extraction noise, ligatures and line-end hyphens don't count as differences. When a quote has drifted, it tells you exactly where:
+`AGENTS.md` tells the agent never to invent a citation. `wiki.py quotes` enforces it. For each source note it finds the linked raw file (PDF, EPUB, DOCX, HTML, markdown, text) and checks that every quote appears in it. Only the letters are compared, so PDF extraction noise, ligatures and line-end hyphens don't count as differences. When a quote has drifted, it tells you exactly where:
 
 ```text
 ✗ ERROR (1)
@@ -202,32 +229,39 @@ The wiki is plain markdown with relative links, so the folder also opens as an [
 
 | Command | What it does |
 |---|---|
+| `python3 scripts/wiki.py check` | **The finishing check**: lint errors, plus quotes in every changed source note. |
 | `python3 scripts/wiki.py lint` | Links, orphans, index drift, frontmatter, size, thin support. Exits nonzero on any error. |
 | `python3 scripts/wiki.py quotes [NOTE]` | Every direct quote against its raw file, plus page numbers. |
 | `python3 scripts/wiki.py graph [--around PAGE]` | The wiki's link graph as a Mermaid diagram. |
 | `python3 scripts/wiki.py move OLD NEW` | Renames a page and rewrites every link and `related:` entry pointing to it. |
+| `python3 scripts/wiki.py prompt ingest\|query\|lint` | Bundles a workflow into one message for any chat app. |
+| `python3 scripts/wiki.py apply` | Writes a chat model's reply into the wiki, then runs `check`. |
 
-Three things run the checks for you:
+The finishing check runs whichever agent you use:
 
-- **A Stop hook** ([`.claude/hooks/lint_gate.py`](.claude/hooks/lint_gate.py)). Before Claude finishes a task that changed the wiki, lint must pass and the quotes in changed source notes must match. If not, Claude is sent back to fix them. This is enforced by the harness, not left to the model's memory.
-- **GitHub Actions** ([`.github/workflows/wiki.yml`](.github/workflows/wiki.yml)). Every push to your fork is checked the same way.
-- **Other agents** (Codex, Gemini CLI, Cursor…). They read [`AGENTS.md`](AGENTS.md), which points them to the same schema and checks.
+- **Every agent** runs `wiki.py check` as the last step of each ingest; `AGENTS.md` requires it.
+- **A git pre-commit hook** ([`.githooks/pre-commit`](.githooks/pre-commit)) refuses any commit whose wiki changes break a link or misquote a source, no matter which agent (or person) made them. Turn it on once per clone with `git config core.hooksPath .githooks`.
+- **GitHub Actions** ([`.github/workflows/wiki.yml`](.github/workflows/wiki.yml)) checks every push to your fork.
+- **`wiki.py apply`** checks everything a chat model sends back.
+- **In Claude Code**, a Stop hook ([`.claude/hooks/lint_gate.py`](.claude/hooks/lint_gate.py)) runs the check before Claude finishes a task and sends it back to fix what fails.
 
 ## Folder structure
 
 ```
 raw/                  your sources — immutable
   articles/  books/  chapters/  notes/  annotations/  transcripts/  images/  _staging/
-wiki/                 written by Claude
+wiki/                 written by the agent
   concepts/  authors/  debates/  themes/  methods/  syntheses/  source-notes/  projects/
 templates/            one template per page type, read on demand
 outputs/              finished deliverables: essays/  slides/  handouts/  tables/
 archive/              superseded pages
 conversations/        saved sessions
-.claude/              /ingest /query /lint skills, the Stop hook, permissions
-scripts/wiki.py       lint · quotes · graph · move
+.githooks/            pre-commit: the finishing check on every commit
+.claude/              Claude Code extras: /ingest /query /lint, the Stop hook
+scripts/wiki.py       check · lint · quotes · graph · move · prompt · apply
 conventions.toml      the machine-checkable rules the tool reads
-CLAUDE.md             the schema — "the law of the wiki"
+AGENTS.md             the schema — "the law of the wiki", for every agent
+CLAUDE.md, GEMINI.md  one-line imports of AGENTS.md for Claude Code and Gemini CLI
 index.md · log.md     navigation and history
 ```
 
@@ -243,14 +277,14 @@ index.md · log.md     navigation and history
 | **Project** | `wiki/projects/<name>/` | Your active research or writing projects |
 | **Method** · **Theme** | `wiki/methods/` · `wiki/themes/` | Research methods; clusters that exceed one concept |
 
-Each type has a template in [`templates/`](templates) with YAML frontmatter (`title`, `type`, `tags`, `related`, `created`, `updated`). Claude reads a template only when it is about to write that kind of page, so the always-loaded `CLAUDE.md` stays lean.
+Each type has a template in [`templates/`](templates) with YAML frontmatter (`title`, `type`, `tags`, `related`, `created`, `updated`). The agent reads a template only when it is about to write that kind of page, so the always-loaded `AGENTS.md` stays lean.
 
 ## Scaling advice
 
 - Start with your own research map as the first ingest. It seeds the wiki with *your* framework.
 - Ingest one source at a time for the first 10–15, and supervise the quality.
 - Don't ingest your whole library, only what matters to your active projects. `raw/_staging/` is a holding pen: review it weekly.
-- Run `/lint` every 10–15 ingests.
+- Lint every 10–15 ingests.
 - Create the first synthesis when a cluster has 4+ sources and keeps coming up in queries.
 - At ~50 sources the wiki becomes a genuine research tool; at ~100 it's indispensable.
 
@@ -264,14 +298,14 @@ Two adjacent systems in my setup share this DNA but serve other ends. The **Meta
 
 ## Requirements
 
-- [Claude Code](https://claude.ai/code): terminal, desktop app, or IDE extension
-- Python 3.9+ for `scripts/wiki.py` (optional; the wiki itself is pure markdown)
+- An AI agent: any from the [table above](#works-with-any-model), or just a chat app
+- Python 3.9+ for `scripts/wiki.py`: recommended for the checks, and required for the chat-app route (the wiki itself is pure markdown)
 - [poppler](https://poppler.freedesktop.org/)'s `pdftotext` so `wiki quotes` can read PDFs (optional; `brew install poppler` / `apt install poppler-utils`)
 
 ## Credits
 
 - **Pattern:** [Andrej Karpathy, "LLM Wiki"](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) (April 2026)
 - **Tooling ideas:** [engram](https://github.com/jeromeetienne/engram) (the tool is the hands, the agent is the head) and [tome](https://github.com/chicken-noodle-chris/tome) (`conventions.toml`)
-- **Adaptation and implementation:** [Paulo de Assis](https://github.com/MetamusicX), with Claude Code (Anthropic)
+- **Adaptation and implementation:** [Paulo de Assis](https://github.com/MetamusicX), built with Claude Code (Anthropic)
 
 See [CHANGELOG](CHANGELOG.md) for what's new. MIT licensed.

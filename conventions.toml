@@ -1,10 +1,10 @@
 # conventions.toml — data-shaped rules for the Research Wiki, read by scripts/wiki.py.
 #
-# The *prose* schema (identity, workflows, page templates) stays in CLAUDE.md —
+# The *prose* schema (identity, workflows, page templates) stays in AGENTS.md —
 # that is authoritative for taste and process. This file holds only the
 # *machine-checkable* data extracted from it: the type enum, required
 # frontmatter, folder↔type map, size caps, and staleness thresholds. Keep the two
-# in sync: when CLAUDE.md changes a checkable rule, mirror it here so
+# in sync: when AGENTS.md changes a checkable rule, mirror it here so
 # `wiki lint` stays truthful.
 #
 # Python 3.9 has no tomllib; scripts/wiki.py ships a minimal parser for THIS
@@ -86,7 +86,7 @@ min_source_links = 2
 # appears in the index still reads as an orphan). They are still checked for
 # their own broken links — except log.md, which is append-only, never
 # auto-read, and excluded from link-checking entirely.
-noninbound_files = ["index.md", "log.md", "README.md", "CLAUDE.md"]
+noninbound_files = ["index.md", "log.md", "README.md", "AGENTS.md", "CLAUDE.md", "GEMINI.md"]
 no_linkcheck_files = ["log.md"]
 # Directories under the repo root that are not part of the wiki graph.
-dirs = ["archive", "outputs", "conversations", "raw", ".git", ".github", "scripts"]
+dirs = ["archive", "outputs", "conversations", "raw", ".git", ".github", ".githooks", "scripts", "templates"]

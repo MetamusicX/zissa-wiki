@@ -11,7 +11,7 @@ body:
     attributes:
       label: What's the idea?
       description: Describe the improvement and the problem it solves.
-      placeholder: "A 'method' page type exists in CLAUDE.md but isn't documented in the README's page-types table."
+      placeholder: "A 'method' page type exists in AGENTS.md but isn't documented in the README's page-types table."
     validations:
       required: true
   - type: textarea

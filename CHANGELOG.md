@@ -2,6 +2,45 @@
 
 All notable changes to Zissa Wiki are recorded here.
 
+## v1.2.0 — 2026-09-26 — model-agnostic
+
+Zissa Wiki no longer depends on Claude Code. Any agent, and any model, can run it.
+
+### Changed
+- **The schema is now `AGENTS.md`**, the cross-tool convention read by Codex,
+  Cursor, GitHub Copilot's agent, OpenCode and others. `CLAUDE.md` and
+  `GEMINI.md` are one-line imports of it, so Claude Code and Gemini CLI read the
+  same rules. Its text is vendor-neutral, and subagents are optional.
+- The working notes from the Claude skills (wait for the go-ahead, paraphrase
+  what can't be found, say where the wiki is silent, merge the lint list) now
+  live in the workflows of `AGENTS.md`, so every agent gets them. The
+  `/ingest`, `/query` and `/lint` skills are now thin shortcuts.
+
+### Added
+- **`wiki check`** — the finishing check as one command: lint errors plus the
+  quote check on every source note changed since the last commit. INGEST ends
+  with it, whichever agent runs it.
+- **`wiki prompt` and `wiki apply`** — the workflows in any chat app (ChatGPT,
+  Grok, Le Chat, DeepSeek, Kimi, Claude.ai…). `prompt` bundles the schema,
+  templates, index, relevant pages and source text (PDFs with their printed page
+  numbers) into one message. `apply` writes the model's reply back, accepting
+  only `wiki/**.md`, `index.md` and `log.md`, and then runs `wiki check`.
+- **A git pre-commit hook** (`.githooks/pre-commit`, enabled with
+  `git config core.hooksPath .githooks`) that refuses commits whose wiki
+  changes break a link or misquote a source, whichever agent made them. The
+  Claude Stop hook now calls the same `wiki check`.
+- README: a "Works with any model" section with a per-tool table and the
+  chat-app recipe.
+
+### Fixed
+- **Quotes could escape checking.** A source note that quoted but never linked
+  its raw file had every quote silently skipped. `wiki quotes` now warns
+  (`quote-no-source`), and `wiki check` treats it as an error. Found by the
+  Mistral test ingest; `wiki prompt ingest` now tells the model the exact link
+  to use.
+- `SECURITY.md` described the template as having no executable code; it now
+  covers `wiki.py` and the path restrictions on `wiki apply`.
+
 ## v1.1.0 — 2026-09-26
 
 ### Added
