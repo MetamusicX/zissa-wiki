@@ -277,6 +277,8 @@ index.md · log.md     navigation and history
 | **Project** | `wiki/projects/<name>/` | Your active research or writing projects |
 | **Method** · **Theme** | `wiki/methods/` · `wiki/themes/` | Research methods; clusters that exceed one concept |
 
+Optionally, every claim can carry an **epistemic marker**: `[W]` for the wiki's own synthesis across sources, `[P]` for your research position, `[?]` for the uncertain, and none for a claim a named source makes. The markers keep "what the source says" apart from "what I argue". They are off by default; see *Epistemic Markers* in [`AGENTS.md`](AGENTS.md) to switch them on.
+
 Each type has a template in [`templates/`](templates) with YAML frontmatter (`title`, `type`, `tags`, `related`, `created`, `updated`). The agent reads a template only when it is about to write that kind of page, so the always-loaded `AGENTS.md` stays lean.
 
 ## Scaling advice

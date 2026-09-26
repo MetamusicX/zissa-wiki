@@ -52,7 +52,9 @@ max = 5
 # tagging claims by provenance — e.g. [P] on a "Relevance to <you>'s Research"
 # header for your own research positions, and [W] on a synthesis "## Overview"
 # for the wiki's own cross-source synthesis — uncomment this to have `wiki lint`
-# enforce it. Adjust the header text to match your schema.
+# enforce it. Adjust the header text to match your schema. The convention itself
+# (all four markers: none, [W], [P], [?]) is described in AGENTS.md under
+# "Epistemic Markers (optional)".
 #
 # [markers]
 # relevance_header = "Relevance to Your Research"   # this header must carry [P]

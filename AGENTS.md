@@ -201,6 +201,29 @@ Never rename or move a wiki page by hand: use `wiki.py move`, or every relative 
 
 ---
 
+## Epistemic Markers (optional)
+
+In the humanities, "what a source says", "what the wiki concludes across sources" and "what the researcher argues" are different claims, and a page should never blur them. Some wikis mark every claim with its register:
+
+| Marker | Register | Example |
+|---|---|---|
+| *(none)* | Directly attributable to a named source, with its citation | Simondon defines transduction as… (p. 32) |
+| `[W]` | Wiki synthesis: your own integration across several sources | [W] Read together, DeLanda and Sauvagnargues suggest… |
+| `[P]` | The researcher's own position, not what any source says | [P] A score is a metastable system, not an identity. |
+| `[?]` | Uncertain: an attribution, date or claim you could not verify | [?] The term may first appear in the 1958 thesis. |
+
+**This convention is off by default.** Apply it only if this wiki has adopted it: the Domain Context below says so, or the `[markers]` block in `conventions.toml` is enabled. When it is on:
+
+- Mark every claim in concept, author, debate, theme and synthesis pages. Put the marker at the start of the sentence or bullet it governs.
+- Source notes carry no markers: everything in them is attributed to that one source by definition.
+- The "Relevance to Your Research" header carries `[P]`, and a synthesis's "## Overview" header carries `[W]`. `wiki.py lint` checks both headers once `[markers]` is enabled.
+- Never promote a claim: a `[W]` or `[P]` claim must not reappear elsewhere without its marker, as if a source had said it.
+- Use `[?]` rather than guessing, and log the open question in `log.md`.
+
+To adopt it, uncomment the `[markers]` block in `conventions.toml` and add a line to the Domain Context: "This wiki uses epistemic markers."
+
+---
+
 ## Cross-Referencing Rules
 
 These rules apply whenever creating or updating any page:
