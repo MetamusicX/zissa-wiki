@@ -2,6 +2,15 @@
 
 All notable changes to Zissa Wiki are recorded here.
 
+## Unreleased
+
+### Added
+- **Epistemic markers, documented as an option.** `AGENTS.md` now describes
+  the provenance markers used in the maintainer's own wiki: none for a
+  sourced claim, `[W]` for wiki synthesis, `[P]` for the researcher's
+  position, `[?]` for the uncertain. It also covers how to apply them and how to
+  switch on their lint checks. They stay off by default.
+
 ## v1.2.0 — 2026-09-26 — model-agnostic
 
 Zissa Wiki no longer depends on Claude Code. Any agent, and any model, can run it.
