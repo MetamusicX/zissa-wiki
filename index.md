@@ -18,42 +18,18 @@ The index is organized in four layers:
 
 ## Concept Clusters
 
+_No clusters yet. Add the first one once a few concept pages exist, and aim for 4–6 per domain. Each cluster uses this format:_
+
+```markdown
 ### Cluster A — [Cluster Name]
 *[One-sentence description of what this cluster covers.]*
-**Core pages:** [Concept A](wiki/concepts/concept-a.md) · [Concept B](wiki/concepts/concept-b.md) · [Concept C](wiki/concepts/concept-c.md)
+**Core pages:** [Concept A](wiki/concepts/concept-a.md) · [Concept B](wiki/concepts/concept-b.md)
 **Synthesis:** [Synthesis Title](wiki/syntheses/synthesis-name.md) *(if one exists)*
-**Key authors:** Author A, Author B, Author C
+**Key authors:** Author A, Author B
 
 - [Concept A](wiki/concepts/concept-a.md) — One-line description. Key thinker: X.
 - [Concept B](wiki/concepts/concept-b.md) — One-line description. Key thinkers: X, Y.
-
----
-
-### Cluster B — [Cluster Name]
-*[One-sentence description.]*
-**Core pages:** [Concept D](wiki/concepts/concept-d.md) · [Concept E](wiki/concepts/concept-e.md)
-**Key authors:** Author D, Author E
-
-- [Concept D](wiki/concepts/concept-d.md) — One-line description. Key thinker: X.
-- [Concept E](wiki/concepts/concept-e.md) — One-line description. Key thinker: Y.
-
----
-
-### Cluster C — [Cluster Name]
-*[One-sentence description.]*
-**Core pages:** [Concept F](wiki/concepts/concept-f.md) · [Concept G](wiki/concepts/concept-g.md)
-**Key authors:** Author F, Author G
-
-- [Concept F](wiki/concepts/concept-f.md) — One-line description. Key thinker: X.
-
----
-
-### Cluster D — [Cluster Name]
-*[One-sentence description.]*
-**Core pages:** [Concept H](wiki/concepts/concept-h.md) · [Concept I](wiki/concepts/concept-i.md)
-**Key authors:** Author H, Author I
-
-- [Concept H](wiki/concepts/concept-h.md) — One-line description. Key thinker: X.
+```
 
 ---
 
@@ -65,14 +41,12 @@ _No pages yet. Syntheses are added when a cluster of related pages has enough so
 
 ## Authors
 
-### [Author Group A — e.g., Continental Philosophy]
+_No pages yet. Group authors by area as they arrive, e.g.:_
+
+```markdown
+### [Author Group — e.g., Continental Philosophy]
 - [Author Name](wiki/authors/author-name.md) — One-line description of their relevance.
-
-### [Author Group B — e.g., Posthumanism & STS]
-- [Author Name](wiki/authors/author-name.md) — One-line description.
-
-### [Author Group C — e.g., Domain-specific]
-- [Author Name](wiki/authors/author-name.md) — One-line description.
+```
 
 ---
 

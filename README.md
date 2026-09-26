@@ -1,179 +1,277 @@
 # Zissa Wiki
 
-**Zissa Wiki** is a personal, LLM-maintained knowledge base for academic research, built on plain markdown files and operated via [Claude Code](https://claude.ai/code).
+**A research wiki that writes itself as you read, and checks its own quotes.**
 
-> Part of the **Zissa** family of open, agent-driven tooling — a sibling to [Zissa Agent Orchestra](https://github.com/MetamusicX/zissa-agent-orchestra). *(Formerly `llm-research-wiki`; old links still redirect.)*
+[![wiki checks](https://github.com/MetamusicX/zissa-wiki/actions/workflows/wiki.yml/badge.svg)](https://github.com/MetamusicX/zissa-wiki/actions/workflows/wiki.yml)
+[![release](https://img.shields.io/github/v/release/MetamusicX/zissa-wiki)](https://github.com/MetamusicX/zissa-wiki/releases)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![python 3.9+](https://img.shields.io/badge/python-3.9%2B-informational)](scripts/README.md)
+[![built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757)](https://claude.ai/code)
 
-## Origin
+Zissa Wiki is a personal knowledge base for academic research, kept in plain markdown and maintained by [Claude Code](https://claude.ai/code). You drop a source into `raw/` and say `/ingest`. Claude reads it, writes a source note, and updates every concept, author, debate and project page the source touches. Every direct quote is then checked, word for word, against the file it came from.
 
-This project implements [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) (April 2026) — the idea that instead of using RAG to re-derive knowledge from raw documents on every query, an LLM should incrementally build and maintain a **persistent, structured wiki** that compounds over time.
+It implements [Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): rather than re-deriving knowledge from raw documents on every question (RAG), the model builds a **persistent, interlinked wiki** that compounds with each source. No database, no embeddings, no plugins.
 
-The adaptation was developed by [Paulo de Assis](https://github.com/MetamusicX) in conversation with Claude Code (for implementation, schema authoring, and the full wiki build).
+> Part of the **Zissa** family of open, agent-driven tooling, a sibling to [Zissa Agent Orchestra](https://github.com/MetamusicX/zissa-agent-orchestra). *(Formerly `llm-research-wiki`; old links still redirect.)*
 
-1. **Karpathy's post** — the core pattern: raw sources → LLM-maintained wiki → structured queries
-2. **Design exploration** — adapting the pattern to academic research: domain-specific page types, ingest/query/lint workflows, folder conventions
-3. **Implementation via Claude Code** — building the full system: `CLAUDE.md` schema with six page templates and three workflows, folder structure, first ingest producing 38 wiki pages in a single pass
+## Quickstart
 
-## Template vs. live wiki
+```bash
+git clone https://github.com/MetamusicX/zissa-wiki.git my-wiki
+cd my-wiki
+claude
+```
 
-This repository is the **template** — the unspecialised seed. The `CLAUDE.md` here ships with placeholder Domain Context ("Customize this section") and an empty `raw/`. Fork it and make it yours.
+Then, inside Claude Code:
 
-My own working wiki — the one I actually ingest into daily — is a separate version specialised to my research (Continental philosophy of science, new music studies, posthuman music). On top of this template it adds a populated Domain Context (Deleuze, Simondon, Bachelard, DeLanda, Ferneyhough, Rheinberger…), pre-named project subfolders for active research and writing projects, and a few editorial conventions specific to my workflow. The schema, workflows, and page templates are the same as what you find here.
+1. Fill in the **Domain Context** at the end of `CLAUDE.md`: your research areas and key thinkers.
+2. Write a 2–3 page research map in your own words, save it as `raw/notes/research-map.md`, and run `/ingest raw/notes/research-map.md`. This seeds the wiki with *your* conceptual framework.
+3. Add real sources one at a time with `/ingest raw/articles/<file>.pdf`, and supervise the first 5–10 closely.
+4. Ask questions with `/query <question>`, and audit with `/lint` every 10–15 ingests.
 
-## A note on related systems
+## How it works
 
-Two adjacent systems in my own setup share this repository's DNA but serve different ends, and they sometimes get confused with the research wiki:
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
+flowchart LR
+    you(["You"])
+    agent["<b>Claude Code</b><br/>follows CLAUDE.md<br/>/ingest · /query · /lint"]
+    tool["<b>scripts/wiki.py</b><br/>lint · quotes · graph · move"]
 
-- **MetamusicX wiki** — a Quartz site built from research-team meeting transcripts. Same Karpathy pattern, but the raw layer is spoken conversation and the synthesis layer is atomic entities (composers, philosophers, concepts, threads) extracted by a dedicated agent.
-- **Alluvium** — a journal-to-atomic-notes pipeline organised around PARA rather than concepts/authors. Same idea (immutable raw, curated atoms, append-only log) applied to daily voice and text journals.
+    subgraph RAW["raw/ · you add"]
+        src[("Sources<br/>PDF · EPUB · notes<br/>transcripts · images")]
+    end
+    subgraph WIKI["wiki/ · Claude writes"]
+        sn["Source notes"]
+        pages["Concepts · Authors · Debates<br/>Methods · Themes · Projects"]
+        syn["Syntheses"]
+    end
+    subgraph NAV["navigation"]
+        idx["index.md<br/>concept clusters"]
+        log["log.md<br/>every change"]
+    end
 
-These are mentioned only so forkers understand the *scope* of this template: it is the academic-research variant. Meetings, journals, and other input types live in separate systems with their own schemas.
+    you -- "add a source" --> src
+    you -- "ask" --> agent
+    src -. "read, never modified" .-> agent
+    agent --> sn & pages & syn
+    agent --> idx & log
+    agent -- "check before finishing" --> tool
+    tool -. "errors to fix" .-> agent
 
-## What it does
-
-Every time a source is ingested, Claude reads it, extracts key claims and quotes, and writes or updates markdown pages across the wiki — concept pages, author pages, debate pages, synthesis pages, and source notes. The raw documents are never modified. The wiki is the living layer that accumulates knowledge across all ingested sources.
-
-Over time, the wiki becomes smarter than your memory about connections across your reading.
-
-## Architecture
-
-Three layers:
+    classDef ai fill:#fbe7df,stroke:#d97757,color:#1f2328
+    classDef det fill:#e2e8f0,stroke:#475569,color:#1f2328
+    class agent ai
+    class tool det
+```
 
 | Layer | Contents | Who writes it |
-|-------|----------|---------------|
-| **raw/** | Immutable source documents (articles, books, chapters, notes, transcripts, annotations, images) | You |
-| **wiki/** | Structured markdown pages (concepts, authors, debates, syntheses, source-notes, projects) | The LLM |
-| **schema** | `CLAUDE.md` (operational instructions), `index.md` (master index), `log.md` (change log) | You + the LLM |
+|---|---|---|
+| **`raw/`** | Immutable sources: articles, books, chapters, notes, transcripts, annotations, images | You |
+| **`wiki/`** | Interlinked markdown pages: source notes, concepts, authors, debates, syntheses, projects | Claude |
+| **schema** | `CLAUDE.md` (the rules), `templates/` (one per page type), `index.md` (clusters), `log.md` (history) | You and Claude |
 
-![How Zissa Wiki works: you add sources to raw/; Claude Code, following CLAUDE.md, reads them and writes source notes, concept/author/debate pages and syntheses into wiki/, keeps index.md and log.md current, and runs scripts/wiki.py for mechanical lint checks](.github/assets/zissa-wiki-overview.png)
+Raw sources are read once and never modified. The wiki is the layer that answers questions.
 
-## Workflows
+## The three workflows
 
-The operational logic lives in `CLAUDE.md`. Claude reads it at the start of every session and acts as a dedicated research intelligence agent. Three core workflows:
+The rules live in [`CLAUDE.md`](CLAUDE.md), which Claude Code loads at the start of every session. Each workflow is also a slash command, defined in [`.claude/skills/`](.claude/skills).
 
-### INGEST
-Drop a source into `raw/`, then say **"ingest [filename]"**. Claude reads it, discusses key takeaways, writes a source note, and updates every concept/author/debate/project page touched by the source. A single ingest typically creates or updates 10–15 wiki pages. Everything is logged in `log.md`.
+### `/ingest`: one source in, 10–15 pages updated
 
-### QUERY
-Ask any research question. Claude checks `index.md` first — identifying the relevant **cluster**, then reading the **synthesis page** for that cluster if one exists, then following the **`related:` field** on each page to navigate to adjacent concepts. This three-step cascade (cluster → synthesis → related) dramatically reduces the number of pages read per query as the wiki grows.
+```mermaid
+sequenceDiagram
+    actor You
+    participant C as Claude Code
+    participant W as wiki/ · index · log
+    participant T as wiki.py
 
-### LINT
-Say **"lint"** to audit the wiki for duplicates, contradictions, orphan pages, stale content, concepts mentioned but lacking pages, and thin source support. Results are presented as a prioritized issues list. Nothing is auto-fixed.
-
-The judgement-based checks (duplicates, contradictions, weak pages) are the agent's job. The **mechanical** ones — broken links, orphan pages, index drift, missing frontmatter — are handled deterministically by a small, zero-dependency Python tool, `scripts/wiki.py`, driven by `conventions.toml`:
-
-```bash
-python3 scripts/wiki.py lint            # link integrity, orphans, index drift, frontmatter
-python3 scripts/wiki.py lint --min-severity error   # the commit gate — exits nonzero on any error
+    You->>C: /ingest raw/articles/smith-2020.pdf
+    C->>C: read the source in full
+    C-->>You: central argument, key claims, pages it will touch
+    You->>C: go ahead
+    C->>W: write the source note
+    C->>T: quotes smith-2020-….md
+    T-->>C: p. 45 — the source reads "tensions", not "energies"
+    C->>W: fix the quote against the source
+    par one subagent per page
+        C->>W: concept, author, debate and project pages
+    end
+    C->>W: index.md and log.md
+    Note over C,T: Stop hook: lint + quotes must pass
+    C->>T: lint
+    T-->>C: 0 errors
+    C-->>You: 12 pages created or updated
 ```
 
-A second command checks the scholarly fidelity of the wiki itself: every direct quote in a source note is compared, word for word, with the raw file it came from. When a quote has drifted, it shows where, and what the source actually says:
+Claude discusses the source with you **before writing anything**. It reads each page template only when it is about to write that kind of page, and on large ingests it can hand independent page updates to parallel subagents.
 
-```bash
-python3 scripts/wiki.py quotes          # quotes vs. raw files, and their page numbers
+### `/query`: answers from the wiki, at constant cost
+
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
+flowchart LR
+    q(["Your question"]) --> idx["index.md<br/>find the cluster"]
+    idx --> has{"Synthesis for<br/>this cluster?"}
+    has -- yes --> syn["Read the synthesis"]
+    has -- no --> core["Read the core pages"]
+    syn --> rel["Follow <code>related:</code><br/>to neighbours"]
+    core --> rel
+    rel --> ans(["Answer, citing<br/>wiki pages"])
+    ans -. "worth keeping?" .-> save["Save as a<br/>new synthesis"]
 ```
 
-It follows the *"the tool is the hands; the agent is the head"* split (borrowed from [engram](https://github.com/jeromeetienne/engram) and [tome](https://github.com/chicken-noodle-chris/tome)): move everything mechanically checkable out of the model so the agent stops hand-scanning every page. An empty template lints clean. See `scripts/README.md` for the full check list and `conventions.toml` for the rules.
+A flat index gets slow past ~50 pages. So queries run a three-step cascade:
+
+1. **Concept clusters.** `index.md` groups concepts into 4–6 thematic clusters per domain, and a query picks its cluster first.
+2. **Synthesis pages.** A cluster's pre-digested overview in `wiki/syntheses/`. One page read instead of six.
+3. **`related:` fields.** Every concept and author page lists its 3–5 closest neighbours, so Claude can move between pages without re-scanning the index.
+
+Each step narrows the reading set, which keeps query cost roughly constant at 100+ pages.
+
+### `/lint`: the tool is the hands, the agent is the head
+
+Mechanical checks run as deterministic Python; judgement checks are left to Claude. The result is one prioritised list, and nothing is fixed without your say.
+
+| `wiki.py` checks, exactly and for free | Claude judges, by reading |
+|---|---|
+| broken links, orphan pages, index drift | duplicate pages |
+| missing or invalid frontmatter | contradictions between pages |
+| oversize pages, thin source support | stale pages that new sources should have touched |
+| **misquotes** against the raw file, and wrong page numbers | weak or generic pages |
+
+## Quotes you can trust
+
+`CLAUDE.md` tells the agent never to invent a citation. `wiki.py quotes` enforces it. For each source note it finds the linked raw file (PDF, EPUB, DOCX, HTML, markdown, text) and checks that every quote appears in it. Only the letters are compared, so PDF extraction noise, ligatures and line-end hyphens don't count as differences. When a quote has drifted, it tells you exactly where:
+
+```text
+✗ ERROR (1)
+  wiki/source-notes/x-2020.md:14  [quote-differs] departs from the source at
+  “…ndividual is a reservoir of energies”; the source reads “…dividual is a reservoir of tensions.”
+```
+
+It also catches omissions made without an ellipsis, dropped in-text citations, and page numbers that don't hold the passage. It reads the page numbers printed in the PDF, so book pages and PDF pages don't get confused.
+
+## See your wiki
+
+`wiki.py graph` draws the wiki, or the neighbourhood of one page, as a Mermaid diagram. That renders on GitHub, in Obsidian, and inside any wiki page:
+
+```bash
+python3 scripts/wiki.py graph --around individuation
+```
+
+```mermaid
+flowchart LR
+    n0(["Gilbert Simondon"])
+    n1(["Gilles Deleuze"])
+    n2("Difference in itself")
+    n3("Individuation")
+    n4("Metastability")
+    n5("Preindividual")
+    n6("Transduction")
+    n7[["Deleuze 1968 — Difference and Repetition"]]
+    n8[["Simondon — L'individuation"]]
+    n9[/"Individuation from Simondon to Deleuze"/]
+    n0 --> n3
+    n2 --> n3
+    n3 --> n5
+    n3 <--> n6
+    n3 <--> n7
+    n3 <--> n8
+    n9 --> n3
+    n1 -.- n3
+    n4 -.- n3
+    classDef author fill:#fce7f3,stroke:#db2777,color:#1f2328
+    class n0,n1 author
+    classDef concept fill:#dbeafe,stroke:#3b82f6,color:#1f2328
+    class n2,n3,n4,n5,n6 concept
+    classDef source_note fill:#f1f5f9,stroke:#64748b,color:#1f2328
+    class n7,n8 source_note
+    classDef synthesis fill:#dcfce7,stroke:#16a34a,color:#1f2328
+    class n9 synthesis
+    style n3 stroke-width:3px
+```
+
+<sub>Shapes and colours by page type: concepts rounded blue, authors pill-shaped pink, source notes grey, syntheses green. Solid arrows are links; dotted lines are `related:` entries. `--depth 2` goes a hop further; `--all-edges` adds the links between neighbours. Illustrative demo pages.</sub>
+
+The wiki is plain markdown with relative links, so the folder also opens as an [Obsidian](https://obsidian.md) vault as it is, graph view included.
+
+## Tools
+
+`scripts/wiki.py` is a single-file, zero-dependency Python tool (3.9+). Full reference: [`scripts/README.md`](scripts/README.md).
+
+| Command | What it does |
+|---|---|
+| `python3 scripts/wiki.py lint` | Links, orphans, index drift, frontmatter, size, thin support. Exits nonzero on any error. |
+| `python3 scripts/wiki.py quotes [NOTE]` | Every direct quote against its raw file, plus page numbers. |
+| `python3 scripts/wiki.py graph [--around PAGE]` | The wiki's link graph as a Mermaid diagram. |
+| `python3 scripts/wiki.py move OLD NEW` | Renames a page and rewrites every link and `related:` entry pointing to it. |
+
+Three things run the checks for you:
+
+- **A Stop hook** ([`.claude/hooks/lint_gate.py`](.claude/hooks/lint_gate.py)). Before Claude finishes a task that changed the wiki, lint must pass and the quotes in changed source notes must match. If not, Claude is sent back to fix them. This is enforced by the harness, not left to the model's memory.
+- **GitHub Actions** ([`.github/workflows/wiki.yml`](.github/workflows/wiki.yml)). Every push to your fork is checked the same way.
+- **Other agents** (Codex, Gemini CLI, Cursor…). They read [`AGENTS.md`](AGENTS.md), which points them to the same schema and checks.
 
 ## Folder structure
 
 ```
-raw/
-  articles/   books/   chapters/   notes/   annotations/
-  transcripts/   images/   _staging/
-wiki/
-  concepts/   authors/   debates/   themes/   methods/
-  syntheses/   source-notes/   projects/
-outputs/
-  essays/   slides/   handouts/   tables/
-conversations/
-archive/
-scripts/            wiki.py — the deterministic `wiki lint` and `wiki quotes` tools
-conventions.toml    data-shaped rules the linter reads
+raw/                  your sources — immutable
+  articles/  books/  chapters/  notes/  annotations/  transcripts/  images/  _staging/
+wiki/                 written by Claude
+  concepts/  authors/  debates/  themes/  methods/  syntheses/  source-notes/  projects/
+templates/            one template per page type, read on demand
+outputs/              finished deliverables: essays/  slides/  handouts/  tables/
+archive/              superseded pages
+conversations/        saved sessions
+.claude/              /ingest /query /lint skills, the Stop hook, permissions
+scripts/wiki.py       lint · quotes · graph · move
+conventions.toml      the machine-checkable rules the tool reads
+CLAUDE.md             the schema — "the law of the wiki"
+index.md · log.md     navigation and history
 ```
 
 ## Page types
 
-Six page templates are defined in `CLAUDE.md`, each with YAML frontmatter:
-
 | Type | Location | Purpose |
-|------|----------|---------|
-| **Source note** | `wiki/source-notes/` | One page per ingested source — summary, key claims, quotes, connections |
-| **Concept** | `wiki/concepts/` | One page per concept — definition, key thinkers, related concepts, source support |
-| **Author** | `wiki/authors/` | One page per thinker — bio, key works, concepts, relevance |
-| **Debate** | `wiki/debates/` | Framed intellectual debates — positions, key texts, current state |
-| **Synthesis** | `wiki/syntheses/` | Evolving argumentative overviews across multiple sources |
-| **Project** | `wiki/projects/` | Active research or writing projects — concepts, sources, outputs |
+|---|---|---|
+| **Source note** | `wiki/source-notes/` | One per ingested source: summary, key claims, verified quotes, connections |
+| **Concept** | `wiki/concepts/` | Definition, key thinkers, related concepts, source support |
+| **Author** | `wiki/authors/` | Bio, key works, concepts, relevance to your research |
+| **Debate** | `wiki/debates/` | Framed positions, key texts, current state |
+| **Synthesis** | `wiki/syntheses/` | Evolving argumentative overview of a cluster |
+| **Project** | `wiki/projects/<name>/` | Your active research or writing projects |
+| **Method** · **Theme** | `wiki/methods/` · `wiki/themes/` | Research methods; clusters that exceed one concept |
 
-## Navigation design (v2)
-
-After ~10 sources and 50+ pages, a flat alphabetical index becomes slow to navigate. The system uses a three-layer navigation cascade to keep query cost constant as the wiki grows:
-
-### 1. Concept clusters
-`index.md` organizes concepts into thematic clusters (4–6 per domain) instead of one flat alphabetical list. Each cluster has a one-sentence description, its core pages, a pointer to any synthesis page, and the key authors. A query identifies the relevant cluster(s) first.
-
-### 2. Synthesis pages (`wiki/syntheses/`)
-Synthesis pages are the "inner grooves" of the wiki: pre-digested argumentative overviews across a cluster of related pages. When a synthesis page exists for a cluster, a query reads it first — one page instead of six. Syntheses are created when a cluster has enough source support to warrant a standing overview.
-
-### 3. `related:` YAML field
-Every concept and author page carries a `related:` frontmatter field listing 3–5 of its closest neighbors (by filename stem). After reading one page, the agent uses `related:` to navigate to the next most relevant pages without re-scanning the index.
-
-```yaml
----
-title: "Apparatus / Dispositif"
-type: concept
-tags: [apparatus, Foucault, Barad, Stiegler]
-related: [archive-foucault, distribution-of-the-sensible, program-industries, agency, assemblage]
-created: 2026-04-06
-updated: 2026-04-10
----
-```
-
-The cascade: **cluster → synthesis → related fields → individual pages**. Each step narrows the reading set. At 100+ pages, this keeps query cost roughly constant.
-
-## Getting started
-
-1. Clone this repo
-2. Open the folder in [Claude Code](https://claude.ai/code) (terminal or VS Code)
-3. Edit `CLAUDE.md` to add your own domain context — your research areas, key thinkers, core concepts
-4. Write a short research map in your own words (2–3 pages) and save it in `raw/notes/`
-5. Say **"ingest raw/notes/your-research-map.md"**
-6. Watch the wiki populate with concept pages, author pages, and debate pages from your first source
-7. Add real sources one at a time. Supervise the first 5–10 ingests closely.
-
-## Conventions
-
-- **Filenames:** lowercase-kebab-case (`simondon-transduction.md`)
-- **YAML frontmatter:** Every page starts with `title`, `type`, `tags`, `related` (concepts/authors), `created`, `updated`
-- **Wiki links:** Relative markdown links (`[Transduction](../concepts/transduction.md)`)
-- **Log everything:** Every ingest and change is appended to `log.md`
-- **raw/ is immutable:** Source files are never modified after ingest
-- **The wiki answers questions, not the raw sources:** Build the wiki so it contains what you need
+Each type has a template in [`templates/`](templates) with YAML frontmatter (`title`, `type`, `tags`, `related`, `created`, `updated`). Claude reads a template only when it is about to write that kind of page, so the always-loaded `CLAUDE.md` stays lean.
 
 ## Scaling advice
 
-- Start with your own research map as the first ingest — it seeds the wiki with YOUR conceptual framework
-- Ingest sources one at a time for the first 10–15 sources — supervise quality
-- Don't try to ingest your entire library — only ingest what matters to your active projects
-- Use `raw/_staging/` as a holding pen for candidates — review weekly, promote or remove
-- Run lint every 10–15 ingests to keep the wiki healthy
-- Create your first synthesis page when a cluster has 4+ sources and keeps coming up in queries
-- At ~50 sources the wiki becomes a genuine research tool; at ~100 it's indispensable
+- Start with your own research map as the first ingest. It seeds the wiki with *your* framework.
+- Ingest one source at a time for the first 10–15, and supervise the quality.
+- Don't ingest your whole library, only what matters to your active projects. `raw/_staging/` is a holding pen: review it weekly.
+- Run `/lint` every 10–15 ingests.
+- Create the first synthesis when a cluster has 4+ sources and keeps coming up in queries.
+- At ~50 sources the wiki becomes a genuine research tool; at ~100 it's indispensable.
+
+## Template vs. live wiki
+
+This repository is the **template**, the unspecialised seed: placeholder Domain Context, empty `raw/` and `wiki/`. Fork it and make it yours. Please keep your own research content in your fork rather than opening PRs with it here; see [CONTRIBUTING](CONTRIBUTING.md).
+
+My own working wiki is a separate version specialised to my research (Continental philosophy of science, new music studies, posthuman music). It uses the same schema, workflows and templates, plus a populated Domain Context and project folders.
+
+Two adjacent systems in my setup share this DNA but serve other ends. The **MetamusicX wiki** builds atomic entities from research-meeting transcripts, and **Alluvium** turns daily journals into PARA-organised atomic notes. This template is the academic-research variant.
 
 ## Requirements
 
-- [Claude Code](https://claude.ai/code) (terminal or desktop app)
-- The `CLAUDE.md` file in the root folder — this is what makes Claude a wiki agent
-- No database, no embeddings, no plugins — just markdown files and folders
-- Python 3.9+ (optional — only for the `wiki lint` and `wiki quotes` tools; the wiki itself is pure markdown)
-- [poppler](https://poppler.freedesktop.org/)'s `pdftotext` (optional — lets `wiki quotes` read PDF sources; `brew install poppler`)
+- [Claude Code](https://claude.ai/code): terminal, desktop app, or IDE extension
+- Python 3.9+ for `scripts/wiki.py` (optional; the wiki itself is pure markdown)
+- [poppler](https://poppler.freedesktop.org/)'s `pdftotext` so `wiki quotes` can read PDFs (optional; `brew install poppler` / `apt install poppler-utils`)
 
 ## Credits
 
 - **Pattern:** [Andrej Karpathy, "LLM Wiki"](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) (April 2026)
-- **Adaptation and implementation:** [Paulo de Assis](https://github.com/MetamusicX)
-- **Schema authoring and build:** Claude Code (Anthropic)
+- **Tooling ideas:** [engram](https://github.com/jeromeetienne/engram) (the tool is the hands, the agent is the head) and [tome](https://github.com/chicken-noodle-chris/tome) (`conventions.toml`)
+- **Adaptation and implementation:** [Paulo de Assis](https://github.com/MetamusicX), with Claude Code (Anthropic)
 
-## License
-
-MIT
+See [CHANGELOG](CHANGELOG.md) for what's new. MIT licensed.

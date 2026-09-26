@@ -104,6 +104,52 @@ Scanned PDFs need OCR first.
 **Translations.** A quote whose citation says `trans.`, `translated` or
 `my translation` is skipped — it cannot match the original-language source.
 
+## `wiki graph` — see the wiki as a diagram
+
+Prints the link graph as a [Mermaid](https://mermaid.js.org) flowchart, which
+renders on GitHub, in Obsidian, and inside any wiki page. Node shape and colour
+follow the page type; solid arrows are links (`<-->` when mutual), dotted lines
+are `related:` entries.
+
+```bash
+python3 scripts/wiki.py graph                                  # the whole wiki (best-connected 60 pages)
+python3 scripts/wiki.py graph --around transduction            # one page and its neighbours
+python3 scripts/wiki.py graph --around transduction --depth 2  # …and theirs
+python3 scripts/wiki.py graph --around transduction --all-edges  # plus links among the neighbours
+python3 scripts/wiki.py graph --type concept --type author     # only some page types
+python3 scripts/wiki.py graph --raw > docs/graph.mmd           # without the ```mermaid fence
+```
+
+`--around` accepts a stem, a filename or a path. By default it draws only the
+edge by which each page was reached, a tree out from the centre, because a full
+neighbourhood quickly becomes unreadable. `--max-nodes` (default 60) keeps the
+best-connected pages when the selection is larger.
+
+## `wiki move` — rename without breaking links
+
+Because pages use relative links, renaming one by hand breaks every link to it.
+`move` renames the page and rewrites, in one pass, every inbound link across
+`wiki/` and `index.md` (keeping `#anchors`), every `related:` entry naming its
+stem, and the moved page's own outgoing links if it changes folder.
+
+```bash
+python3 scripts/wiki.py move wiki/concepts/transduction.md wiki/concepts/transduction-simondon.md --dry-run
+python3 scripts/wiki.py move wiki/concepts/transduction.md wiki/concepts/transduction-simondon.md
+```
+
+It refuses to overwrite an existing page. `log.md` is history and is left as
+written. Links inside code are examples and are left alone.
+
+## Tests
+
+```bash
+python3 -m unittest discover tests
+```
+
+The suite builds a small wiki in a temporary folder and exercises `lint`,
+`quotes`, `graph` and `move` against it. It also checks that the template itself
+lints clean, both empty and after its first page. CI runs it on Python 3.9 and 3.13.
+
 ## Configuration — `conventions.toml`
 
 Data-shaped rules live in `../conventions.toml`: the type enum, required
@@ -120,11 +166,9 @@ for the wiki's cross-source synthesis), uncomment the `[markers]` block in
 
 ## Roadmap
 
-The CLI is built as a subcommand seam; `lint` is the first tenant. Natural next
-tenants, in rough priority order:
+The CLI is built as a subcommand seam: `lint`, `quotes`, `graph` and `move`
+so far. Natural next tenants, in rough priority order:
 
-- `wiki move <old> <new>` — rename a page and rewrite every inbound relative link
-  (painful by hand because we use relative links, not `[[wikilinks]]`).
 - `wiki search <query>` — BM25 over frontmatter + body, an index-fallback for query.
 - `wiki whois <name>` — resolve an author name/alias to its page.
 - `wiki index` — regenerate / diff `index.md` from page frontmatter.
