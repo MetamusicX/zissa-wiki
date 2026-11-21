@@ -11,15 +11,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python: ["3.9", "3.13"]
+        python: ["3.10", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: Install pdftotext (for quote checks against PDFs)
-        run: sudo apt-get install -y --no-install-recommends poppler-utils
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
       - name: Tool tests
         if: hashFiles('tests/test_wiki.py') != ''
         run: python -m unittest discover tests -v

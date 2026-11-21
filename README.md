@@ -5,7 +5,7 @@
 [![wiki checks](https://github.com/MetamusicX/zissa-wiki/actions/workflows/wiki.yml/badge.svg)](https://github.com/MetamusicX/zissa-wiki/actions/workflows/wiki.yml)
 [![release](https://img.shields.io/github/v/release/MetamusicX/zissa-wiki)](https://github.com/MetamusicX/zissa-wiki/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![python 3.9+](https://img.shields.io/badge/python-3.9%2B-informational)](scripts/README.md)
+[![python 3.10+](https://img.shields.io/badge/python-3.10%2B-informational)](scripts/README.md)
 [![works with any LLM agent](https://img.shields.io/badge/works%20with-any%20LLM%20agent-8b5cf6)](#works-with-any-model)
 
 Zissa Wiki is a personal knowledge base for academic research, kept in plain markdown and maintained by the AI agent of your choice: Claude Code, Codex, Gemini CLI, Cursor, an open-source agent running DeepSeek, Kimi, Qwen or Mistral, or a plain chat window in ChatGPT, Grok, Le Chat or DeepSeek. You drop a source into `raw/` and say *ingest*. The agent reads it, writes a source note, and updates every concept, author, debate and project page the source touches. Every direct quote is then checked, word for word, against the file it came from.
@@ -225,7 +225,7 @@ The wiki is plain markdown with relative links, so the folder also opens as an [
 
 ## Tools
 
-`scripts/wiki.py` is a single-file, zero-dependency Python tool (3.9+). Full reference: [`scripts/README.md`](scripts/README.md).
+`scripts/wiki.py` is a single-file, zero-dependency Python tool (3.10+). Full reference: [`scripts/README.md`](scripts/README.md).
 
 | Command | What it does |
 |---|---|
@@ -301,7 +301,7 @@ Two adjacent systems in my setup share this DNA but serve other ends. The **Meta
 ## Requirements
 
 - An AI agent: any from the [table above](#works-with-any-model), or just a chat app
-- Python 3.9+ for `scripts/wiki.py`: recommended for the checks, and required for the chat-app route (the wiki itself is pure markdown)
+- Python 3.10+ for `scripts/wiki.py`: recommended for the checks, and required for the chat-app route (the wiki itself is pure markdown)
 - [poppler](https://poppler.freedesktop.org/)'s `pdftotext` so `wiki quotes` can read PDFs (optional; `brew install poppler` / `apt install poppler-utils`)
 
 ## Credits

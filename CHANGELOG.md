@@ -11,6 +11,13 @@ All notable changes to Zissa Wiki are recorded here.
   position, `[?]` for the uncertain. It also covers how to apply them and how to
   switch on their lint checks. They stay off by default.
 
+### Changed
+- **Minimum Python is now 3.10.** CI's `ubuntu-latest` runner (Ubuntu 26.04)
+  no longer ships Python 3.9, which is end-of-life, so every CI run was failing.
+  CI now tests 3.10 and 3.13, with `fail-fast: false` so one failing version
+  doesn't hide the other. The workflow also moves to `actions/checkout@v5` and
+  `actions/setup-python@v6`, which run on Node 24.
+
 ## v1.2.0 — 2026-09-26 — model-agnostic
 
 Zissa Wiki no longer depends on Claude Code. Any agent, and any model, can run it.

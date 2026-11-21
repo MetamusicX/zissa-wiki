@@ -7,7 +7,7 @@
 # in sync: when AGENTS.md changes a checkable rule, mirror it here so
 # `wiki lint` stays truthful.
 #
-# Python 3.9 has no tomllib; scripts/wiki.py ships a minimal parser for THIS
+# Python 3.10 has no tomllib; scripts/wiki.py ships a minimal parser for THIS
 # file, so keep it simple: header tables, `key = "string"`, integers, booleans,
 # and single-line arrays. Comments only on their own lines.
 

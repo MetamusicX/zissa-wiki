@@ -29,7 +29,7 @@ python3 scripts/wiki.py lint --root /path/to/wiki # explicit root (else walks up
 Exit code is **nonzero iff there is an ERROR-tier finding**, so it can gate a
 commit or CI run: *"`wiki lint` must pass error-free as the last step of any
 wiki-touching task."* No third-party dependencies (stdlib only; ships its own
-minimal TOML reader for Python 3.9, and prefers `tomllib`/`tomli` when present).
+minimal TOML reader for Python 3.10, and prefers `tomllib`/`tomli` when present).
 **An empty wiki lints clean** — a freshly cloned template with no pages yet
 reports `0 pages` and exits 0.
 
@@ -191,7 +191,7 @@ python3 -m unittest discover tests
 
 The suite builds a small wiki in a temporary folder and exercises every
 command against it. It also checks that the template itself
-lints clean, both empty and after its first page. CI runs it on Python 3.9 and 3.13.
+lints clean, both empty and after its first page. CI runs it on Python 3.10 and 3.13.
 
 ## Configuration — `conventions.toml`
 
